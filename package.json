@@ -1,0 +1,12 @@
+{
+  "name": "night-camera-setting",
+  "version": "1.0.0",
+  "private": true,
+  "description": "야간 촬영(은하수·달·별궤적·유성우·행성·도시 야경) 카메라 설정과 방향을 알려 주는 웹앱",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "TZ=Asia/Seoul node --test 'tests/*.test.js'"
+  },
+  "license": "MIT"
+}
