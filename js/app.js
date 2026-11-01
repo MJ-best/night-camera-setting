@@ -227,6 +227,7 @@ function focusStar(snap) {
 function renderAll() {
   renderContext();
   renderVerdict();
+  renderTargets();
   renderTimeDependent();
   renderExtra();
   renderCalendar();
@@ -257,7 +258,7 @@ function renderTimeDependent() {
 function renderContext() {
   const where = state.placeName || formatCoord(state.lat, state.lon);
   const start = astro.nightStart(state.date);
-  $('contextLine').textContent = `${where} · ${formatDate(start, { weekday: false })} 밤`;
+  $('contextLine').textContent = `${where} · ${formatDate(start, { weekday: false })} 밤 · ${cam.TARGETS[state.target].label}`;
   const l = lens();
   $('lat').value = state.lat.toFixed(4);
   $('lon').value = state.lon.toFixed(4);
@@ -271,7 +272,6 @@ function renderContext() {
   $('bortle').value = String(state.bortle);
   $('lensFor').textContent = `· ${cam.TARGETS[state.target].label}용`;
   $('declination').value = String(declination());
-  document.querySelectorAll('.targets button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.target === state.target)));
   document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === state.skyMode)));
   $('panHint').hidden = state.skyMode !== 'pano';
   $('recenter').hidden = state.skyMode !== 'pano';
@@ -279,14 +279,10 @@ function renderContext() {
   renderSetupSummary();
 }
 
-let lastVerdict = null;
 function renderSetupSummary() {
   const where = state.placeName || formatCoord(state.lat, state.lon);
   const start = astro.nightStart(state.date);
-  const l = lens();
-  const gear = `${cam.sensorOf(state.sensor).label} ${l.focal}mm f/${l.maxAperture}`;
-  const v = lastVerdict ? ` → ${lastVerdict.title} (${lastVerdict.label})` : '';
-  $('setupSummary').textContent = `${where} · ${formatDate(start)} 밤 · ${gear}${v}`;
+  $('setupSummary').textContent = `${where} · ${formatDate(start)} 밤 · ${cam.sensorOf(state.sensor).label} ${state.mp}MP · 광해 ${state.bortle}`;
 }
 
 function renderPlaces() {
@@ -330,15 +326,15 @@ function moonLine() {
   return up ? `${parts[0]}, 밤새 하늘에 있어요.` : `${parts[0]}, 밤에는 뜨지 않아요.`;
 }
 
-function verdictData() {
+function verdictData(t = state.target) {
   const s = night.start;
-  const t = state.target;
   if (t === 'milkyway') {
     const mw = analysis.mw;
     if (!mw.best) {
       return {
         level: 'bad', title: '은하수 촬영이 어려운 밤',
         lines: [night.hasAstroDark ? '어두운 시간대에 은하수가 지평선 가까이 낮게만 있어요.' : '이 날짜·위도는 밤에도 하늘이 완전히 어두워지지 않아요.', moonLine()],
+        short: night.hasAstroDark ? '은하수가 낮게만 떠요' : '하늘이 충분히 어둡지 않아요',
       };
     }
     const r = mw.best.region;
@@ -355,7 +351,8 @@ function verdictData() {
         ? '은하수 중심부(궁수자리)는 해가 진 뒤엔 이미 낮거나 지평선 아래예요. 한국에서는 3~10월, 특히 5~8월이 은하수 중심 시즌이에요.'
         : '은하수 중심부(궁수자리)는 이 시기 밤에 뜨지 않아요. 한국에서는 3~10월, 특히 5~8월이 은하수 중심 시즌이에요.');
     }
-    return { level, title: `은하수 ${level === 'good' ? '촬영하기 좋은 밤' : level === 'ok' ? '촬영 가능' : '조건이 아쉬운 밤'}`, lines, windows: mw.regionWindows };
+    const short = win ? `${r.short} ${formatRange(win, s)}` : `${r.short} · 달빛과 겹침`;
+    return { level, title: `은하수 ${level === 'good' ? '촬영하기 좋은 밤' : level === 'ok' ? '촬영 가능' : '조건이 아쉬운 밤'}`, lines, windows: mw.regionWindows, short };
   }
   if (t === 'moon') {
     const m = night.moon;
@@ -367,7 +364,7 @@ function verdictData() {
     if (analysis.moon.lowMoon && analysis.moon.lowMoon.sunAlt < 0) lines.push(`월출 직후 ${formatNightTime(analysis.moon.lowMoon.t, s)}에는 지평선 가까이 큰 달과 풍경을 함께 담을 수 있어요.`);
     lines.push(`다음 보름 ${formatDate(night.nextFull)} · 다음 삭 ${formatDate(night.nextNew)}`);
     const wins = astro.intervals(night.samples, (x) => x.moon.alt > 10 && x.sun.alt < -4);
-    return { level, title: level === 'bad' ? '달 촬영이 어려운 밤' : `${m.name} 촬영`, lines, windows: wins };
+    return { level, title: level === 'bad' ? '달 촬영이 어려운 밤' : `${m.name} 촬영`, lines, windows: wins, short: `${m.name} ${Math.round(m.illum * 100)}%` };
   }
   if (t === 'startrails') {
     const dark = astro.totalMinutes(night.darkWindows);
@@ -380,7 +377,7 @@ function verdictData() {
       `${pole}은 ${southern() ? '남쪽' : '북쪽'} 고도 약 ${polarAlt}°에 있어 그 주위로 동심원이 그려져요.`,
       moonLine(),
     ];
-    return { level, title: `별궤적 ${level === 'good' ? '촬영하기 좋은 밤' : level === 'ok' ? '촬영 가능' : '어두운 시간이 짧은 밤'}`, lines, windows: night.moonlessDark };
+    return { level, title: `별궤적 ${level === 'good' ? '촬영하기 좋은 밤' : level === 'ok' ? '촬영 가능' : '어두운 시간이 짧은 밤'}`, lines, windows: night.moonlessDark, short: `달 없는 어둠 ${formatDuration(ml)}` };
   }
   if (t === 'meteor') {
     const sh = analysis.shower;
@@ -402,7 +399,8 @@ function verdictData() {
     ];
     const radAlt = new Map(analysis.meteor.radiant.map((r) => [r.t.getTime(), r.alt]));
     const wins = astro.intervals(night.samples, (x) => x.sun.alt < night.darkThreshold && radAlt.get(x.t.getTime()) > 20);
-    return { level, title: `${sh.name}`, lines, windows: wins };
+    const whenShort = days > 1.5 ? `극대 ${Math.round(days)}일 후` : days < -1.5 ? `극대 ${Math.round(-days)}일 지남` : '극대 무렵';
+    return { level, title: `${sh.name}`, lines, windows: wins, short: `${sh.name.replace(/ 유성우$/, '')} · ${whenShort}` };
   }
   if (t === 'planets') {
     const vis = analysis.planets.filter((p) => p.visible);
@@ -412,7 +410,7 @@ function verdictData() {
       : ['어두운 시간에 잘 보이는 밝은 행성이 없어요.'];
     const fp = featuredPlanet();
     const wins = fp ? astro.intervals(night.samples, (x) => x.sun.alt < -6 && x.planets[fp.body].alt > 10) : [];
-    return { level, title: vis.length ? `오늘 밤 보이는 행성 ${vis.length}개` : '행성 보기 어려운 밤', lines, windows: wins };
+    return { level, title: vis.length ? `오늘 밤 보이는 행성 ${vis.length}개` : '행성 보기 어려운 밤', lines, windows: wins, short: vis.length ? vis.map((p) => p.name).join('·') : '밝은 행성 없음' };
   }
   // 도시 야경
   const ev = night.events;
@@ -423,13 +421,40 @@ function verdictData() {
   const wins = [];
   if (ev.blueStart && ev.civilDusk) wins.push({ start: ev.blueStart, end: ev.civilDusk });
   if (ev.civilDawn && ev.blueEnd) wins.push({ start: ev.civilDawn, end: ev.blueEnd });
-  return { level: 'good', title: '블루아워 야경', lines: lines.length ? lines : ['이 날짜·위도에서는 블루아워가 뚜렷하지 않아요.'], windows: wins };
+  return { level: 'good', title: '블루아워 야경', lines: lines.length ? lines : ['이 날짜·위도에서는 블루아워가 뚜렷하지 않아요.'], windows: wins, short: ev.blueStart ? `블루아워 ${formatTime(ev.blueStart)}` : '블루아워 없음' };
+}
+
+const LEVEL_LABEL = { good: '좋음', ok: '보통', bad: '어려움' };
+
+/** 천문 판정에 구름 예보를 반영한다 */
+function judge(t = state.target) {
+  const v = verdictData(t);
+  const wx = nightWeather();
+  let level = v.level;
+  if (wx && t !== 'city') {
+    if (wx.cloud >= 70) level = 'bad';
+    else if (wx.cloud >= 45 && level === 'good') level = 'ok';
+  }
+  return { v, wx, level, label: LEVEL_LABEL[level] };
+}
+
+function renderTargets() {
+  document.querySelectorAll('.target-card').forEach((card) => {
+    const t = card.dataset.target;
+    card.setAttribute('aria-pressed', String(t === state.target));
+    if (!night) return;
+    const j = judge(t);
+    card.querySelector('.tc-status').innerHTML = `<span class="pill ${j.level}">${j.label}</span><span>${escapeHtml(j.v.short || '')}</span>`;
+  });
+  const wx = nightWeather();
+  $('situationHint').textContent = wx
+    ? `카드마다 오늘 밤 조건을 미리 보여 드려요. 예보상 밤 평균 구름 ${Math.round(wx.cloud)}%를 반영했어요.`
+    : '카드마다 오늘 밤 조건을 미리 보여 드려요. 날씨 예보가 없으면 천문 조건만 봐요.';
+  $('toSettings').textContent = `${cam.TARGETS[state.target].label} 촬영 설정 보기 →`;
 }
 
 function renderVerdict() {
-  const v = verdictData();
-  const wx = nightWeather();
-  let level = v.level;
+  const { v, wx, level, label } = judge();
   const chips = [];
   const ev = night.events;
   if (night.hasAstroDark && night.darkWindows.length) {
@@ -442,14 +467,11 @@ function renderVerdict() {
     chips.push(`<span class="chip">구름 <b>${Math.round(wx.cloud)}%</b> ${wx.sky}</span>`);
     if (wx.dewRisk) chips.push('<span class="chip">이슬 주의</span>');
     if (wx.maxWind >= 6) chips.push(`<span class="chip">바람 <b>${wx.maxWind.toFixed(0)}m/s</b></span>`);
-    if (wx.cloud >= 70 && state.target !== 'city') level = 'bad';
-    else if (wx.cloud >= 45 && level === 'good') level = 'ok';
   } else if (weather.status === 'loading') {
     chips.push('<span class="chip">날씨 불러오는 중…</span>');
   } else if (!weather.rows) {
     chips.push('<span class="chip">날씨 정보 없음</span>');
   }
-  const label = { good: '좋음', ok: '보통', bad: '어려움' }[level];
   const lines = [...v.lines];
   if (wx && wx.cloud >= 45 && state.target !== 'city') lines.unshift(`예보상 구름이 많아요 (평균 ${Math.round(wx.cloud)}%). 가장 맑은 때는 ${formatTime(wx.clearest.t)} 무렵 ${Math.round(wx.clearest.cloud)}%예요.`);
   $('verdict').innerHTML = `
@@ -457,8 +479,6 @@ function renderVerdict() {
     <div class="verdict-lines">${lines.map((l) => `<p>${escapeHtml(l)}</p>`).join('')}</div>
     <div class="chips">${chips.join('')}</div>`;
   analysis.windows = v.windows || [];
-  lastVerdict = { title: v.title, label };
-  renderSetupSummary();
 }
 
 /* 카메라 설정 */
@@ -904,6 +924,7 @@ function onWeatherChanged() {
   renderWeatherStatus();
   if (!night) return;
   renderVerdict();
+  renderTargets();
   renderTimelinePanel();
   renderWeatherInfo();
 }
@@ -951,7 +972,7 @@ function renderWeatherInfo() {
 }
 
 /* 페이지 넘기기 */
-const PAGE = { setup: 0, settings: 1, sky: 2, tonight: 3, ref: 4 };
+const PAGE = { setup: 0, situation: 1, settings: 2, sky: 3, tonight: 4, ref: 5 };
 let currentPage = 0;
 
 function pageCount() {
@@ -972,7 +993,7 @@ function setPage(i) {
     if (Number(b.dataset.goto) === i) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
-  $('timebar').hidden = i === PAGE.setup || i === PAGE.ref;
+  $('timebar').hidden = i === PAGE.setup || i === PAGE.situation || i === PAGE.ref;
   if (!changed) return;
   if (i === PAGE.tonight) scheduleScan();
   if (i === PAGE.sky) skyMap.render();
@@ -981,7 +1002,7 @@ function setPage(i) {
 /* ───────────── 이벤트 ───────────── */
 
 function bind() {
-  document.querySelectorAll('.targets button').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('.target-card').forEach((b) => b.addEventListener('click', () => {
     state.target = b.dataset.target;
     saveState();
     state.selected = bestTime();

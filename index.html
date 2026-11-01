@@ -39,30 +39,22 @@
         <span>적색 모드</span>
       </button>
     </div>
-    <nav class="wrap targets" aria-label="촬영 대상">
-      <button type="button" data-target="milkyway" aria-pressed="true">은하수</button>
-      <button type="button" data-target="moon" aria-pressed="false">달</button>
-      <button type="button" data-target="startrails" aria-pressed="false">별궤적</button>
-      <button type="button" data-target="meteor" aria-pressed="false">유성우</button>
-      <button type="button" data-target="planets" aria-pressed="false">행성</button>
-      <button type="button" data-target="city" aria-pressed="false">도시 야경</button>
-    </nav>
   </header>
 
   <main class="pager" id="pager" aria-label="화면 페이지">
 
-    <!-- 1. 준비: 위치·날짜·카메라. 네트워크(GPS·날씨)는 이 페이지에서만 쓴다 -->
+    <!-- 1. 준비: 위치·날짜·카메라를 한 카드에서. 네트워크(GPS·날씨)는 이 페이지에서만 쓴다 -->
     <section class="page" id="page-setup" aria-label="준비">
-      <div class="wrap page-inner">
+      <div class="wrap page-inner narrow">
         <div class="page-head">
-          <p class="eyebrow">1 / 5 · 준비</p>
-          <h2>어디서, 언제, 어떤 장비로 찍나요?</h2>
-          <p class="hint">위치를 정하면 오늘 밤 하늘과 날씨를 한 번만 받아 와요. 다음 페이지부터는 인터넷 없이 계산해요.</p>
+          <p class="eyebrow">1 / 6 · 준비</p>
+          <h2>어디서, 언제, 어떤 카메라로 찍나요?</h2>
+          <p class="hint">위치를 정하면 그곳의 하늘과 날씨를 한 번만 받아 와요. 다음 페이지부터는 인터넷 없이 계산해요.</p>
         </div>
 
-        <div class="setup-grid">
-          <section class="panel" aria-labelledby="locTitle">
-            <h3 id="locTitle">위치</h3>
+        <section class="panel setup-card" aria-label="촬영 준비">
+          <div class="setup-block">
+            <h3>위치</h3>
             <button id="gpsBtn" class="btn primary wide" type="button">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="currentColor"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
               현재 위치 가져오기 (GPS)
@@ -72,13 +64,42 @@
               <label for="lat">위도<input id="lat" type="number" step="0.0001" min="-90" max="90" inputmode="decimal"></label>
               <label for="lon">경도<input id="lon" type="number" step="0.0001" min="-180" max="180" inputmode="decimal"></label>
             </div>
-            <label for="places" class="sr-only">저장한 장소</label>
-            <select id="places"><option value="">저장한 장소 불러오기</option></select>
+            <div class="row-place">
+              <label for="places" class="sr-only">저장한 장소</label>
+              <select id="places"><option value="">저장한 장소 불러오기</option></select>
+            </div>
             <div class="row-place">
               <label for="placeName" class="sr-only">장소 이름</label>
               <input id="placeName" type="text" placeholder="이 위치 이름 (예: 안반데기)" maxlength="30">
               <button id="savePlace" class="btn" type="button">저장</button>
             </div>
+          </div>
+
+          <div class="setup-block">
+            <h3>날짜와 하늘</h3>
+            <div class="row2">
+              <label for="date">촬영 날짜 (밤)<input id="date" type="date"></label>
+              <label for="bortle">하늘 밝기 (광해)<select id="bortle"></select></label>
+            </div>
+            <p class="hint"><span id="dateHint"></span> 광해는 모르면 시골 3, 교외 5, 도시 8.</p>
+          </div>
+
+          <div class="setup-block">
+            <h3>카메라</h3>
+            <div class="row2">
+              <label for="sensor">센서 크기<select id="sensor"></select></label>
+              <label for="mp">화소 (MP)<input id="mp" type="number" min="5" max="120" step="1" inputmode="numeric"></label>
+            </div>
+            <p class="hint">렌즈는 다음 페이지에서 촬영 상황마다 따로 정해요.</p>
+          </div>
+
+          <div class="setup-block">
+            <div class="wx-row">
+              <h3>날씨 예보</h3>
+              <button id="wxRefresh" class="btn small" type="button">다시 받기</button>
+            </div>
+            <p id="wxStatus" class="wx-status">아직 받지 않았어요.</p>
+            <p class="hint">받은 예보는 이 기기에 3시간 동안 저장해 두고 다시 써요.</p>
             <details class="more">
               <summary>나침반 보정 (자기 편각)</summary>
               <div class="decl">
@@ -87,43 +108,48 @@
                 <span class="hint">° · 서편은 음수 (한국 약 −8.5°). 나침반 앱이 ‘진북’ 기준이면 0.</span>
               </div>
             </details>
-          </section>
-
-          <section class="panel" aria-labelledby="whenTitle">
-            <h3 id="whenTitle">날짜와 하늘</h3>
-            <label for="date">촬영 날짜 (밤)<input id="date" type="date"></label>
-            <p class="hint" id="dateHint"></p>
-            <label for="bortle">하늘 밝기 (광해)<select id="bortle"></select></label>
-            <p class="hint">별이 잘 보이는 곳일수록 숫자가 작아요. 모르면 시골 3, 교외 5, 도시 8.</p>
-          </section>
-
-          <section class="panel" aria-labelledby="gearTitle">
-            <h3 id="gearTitle">카메라 · 렌즈 <span class="legend-note" id="lensFor"></span></h3>
-            <label for="sensor">센서 크기<select id="sensor"></select></label>
-            <div class="row2">
-              <label for="mp">화소 (MP)<input id="mp" type="number" min="5" max="120" step="1" inputmode="numeric"></label>
-              <label for="focal">초점거리 (mm)<input id="focal" type="number" min="8" max="2000" step="1" inputmode="numeric"></label>
-            </div>
-            <label for="aperture">렌즈 최대 조리개 (f/)<input id="aperture" type="number" min="0.95" max="16" step="0.1" inputmode="decimal"></label>
-            <p class="hint">렌즈는 위쪽에서 고른 촬영 대상마다 따로 기억해요.</p>
-          </section>
-
-          <section class="panel" aria-labelledby="wxTitle">
-            <h3 id="wxTitle">날씨 예보</h3>
-            <p id="wxStatus" class="wx-status">아직 받지 않았어요.</p>
-            <button id="wxRefresh" class="btn" type="button">예보 다시 받기</button>
-            <p class="hint">받은 예보는 이 기기에 3시간 동안 저장해 두고 다시 쓰므로, 앱을 다시 열어도 데이터를 쓰지 않아요.</p>
-          </section>
-        </div>
+          </div>
+        </section>
 
         <div class="setup-next">
           <p class="setup-summary" id="setupSummary"></p>
-          <button class="btn primary wide" type="button" data-goto="1">촬영 설정 보기 →</button>
+          <button class="btn primary wide" type="button" data-goto="1">촬영 상황 고르기 →</button>
         </div>
       </div>
     </section>
 
-    <!-- 2. 촬영 설정 -->
+    <!-- 2. 상황: 무엇을 찍을지와 그 상황의 렌즈 -->
+    <section class="page" id="page-situation" aria-label="촬영 상황">
+      <div class="wrap page-inner narrow">
+        <div class="page-head">
+          <p class="eyebrow">2 / 6 · 상황</p>
+          <h2>오늘 밤 무엇을 찍을까요?</h2>
+          <p class="hint" id="situationHint">카드마다 오늘 밤 조건을 미리 보여 드려요.</p>
+        </div>
+
+        <div class="target-grid" role="group" aria-label="촬영 상황">
+          <button type="button" class="target-card" data-target="milkyway" aria-pressed="false"><span class="tc-name">은하수</span><span class="tc-desc">광각으로 은하수와 풍경</span><span class="tc-status"></span></button>
+          <button type="button" class="target-card" data-target="moon" aria-pressed="false"><span class="tc-name">달</span><span class="tc-desc">망원으로 달 표면, 광각으로 달 풍경</span><span class="tc-status"></span></button>
+          <button type="button" class="target-card" data-target="startrails" aria-pressed="false"><span class="tc-name">별궤적</span><span class="tc-desc">인터벌 촬영으로 별의 원과 호</span><span class="tc-status"></span></button>
+          <button type="button" class="target-card" data-target="meteor" aria-pressed="false"><span class="tc-name">유성우</span><span class="tc-desc">복사점 쪽 하늘을 연속 촬영</span><span class="tc-status"></span></button>
+          <button type="button" class="target-card" data-target="planets" aria-pressed="false"><span class="tc-name">행성</span><span class="tc-desc">목성·토성 등 밝은 행성</span><span class="tc-status"></span></button>
+          <button type="button" class="target-card" data-target="city" aria-pressed="false"><span class="tc-name">도시 야경</span><span class="tc-desc">블루아워와 야경</span><span class="tc-status"></span></button>
+        </div>
+
+        <section class="panel lens-card" aria-labelledby="lensTitle">
+          <h3 id="lensTitle">렌즈 <span class="legend-note" id="lensFor"></span></h3>
+          <div class="row2">
+            <label for="focal">초점거리 (mm)<input id="focal" type="number" min="8" max="2000" step="1" inputmode="numeric"></label>
+            <label for="aperture">최대 조리개 (f/)<input id="aperture" type="number" min="0.95" max="16" step="0.1" inputmode="decimal"></label>
+          </div>
+          <p class="hint">줌렌즈는 실제로 쓸 초점거리를 넣으세요. 상황마다 따로 기억해요.</p>
+        </section>
+
+        <button class="btn primary wide" type="button" data-goto="2" id="toSettings">촬영 설정 보기 →</button>
+      </div>
+    </section>
+
+    <!-- 3. 촬영 설정 -->
     <section class="page" id="page-settings" aria-label="촬영 설정">
       <div class="wrap page-inner narrow">
         <section class="verdict" id="verdict" aria-live="polite"></section>
@@ -151,7 +177,7 @@
       </div>
     </section>
 
-    <!-- 3. 방향 · 하늘 -->
+    <!-- 4. 방향 · 하늘 -->
     <section class="page" id="page-sky" aria-label="방향과 하늘 지도">
       <div class="wrap page-inner two-col">
         <section class="panel direction" aria-labelledby="dirTitle">
@@ -189,7 +215,7 @@
       </div>
     </section>
 
-    <!-- 4. 오늘 밤 · 30일 -->
+    <!-- 5. 오늘 밤 · 30일 -->
     <section class="page" id="page-tonight" aria-label="오늘 밤 흐름">
       <div class="wrap page-inner narrow">
         <section class="panel tonight" aria-labelledby="tonightTitle">
@@ -213,7 +239,7 @@
       </div>
     </section>
 
-    <!-- 5. 참고 -->
+    <!-- 6. 참고 -->
     <section class="page" id="page-ref" aria-label="참고 자료">
       <div class="wrap page-inner narrow">
         <section class="panel extra" id="extra" aria-live="polite"></section>
@@ -243,10 +269,11 @@
     </div>
     <nav class="wrap pagetabs" id="pageTabs" aria-label="페이지 이동">
       <button type="button" data-goto="0" aria-current="page"><span class="dot"></span>준비</button>
-      <button type="button" data-goto="1"><span class="dot"></span>촬영 설정</button>
-      <button type="button" data-goto="2"><span class="dot"></span>방향·하늘</button>
-      <button type="button" data-goto="3"><span class="dot"></span>오늘 밤</button>
-      <button type="button" data-goto="4"><span class="dot"></span>참고</button>
+      <button type="button" data-goto="1"><span class="dot"></span>상황</button>
+      <button type="button" data-goto="2"><span class="dot"></span>설정</button>
+      <button type="button" data-goto="3"><span class="dot"></span>방향</button>
+      <button type="button" data-goto="4"><span class="dot"></span>오늘 밤</button>
+      <button type="button" data-goto="5"><span class="dot"></span>참고</button>
     </nav>
   </div>
 </div>

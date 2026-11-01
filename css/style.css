@@ -51,6 +51,9 @@ body {
   background: var(--bg);
   color: var(--text);
   font: 15px/1.55 var(--font-body);
+  /* 한글은 어절 단위로 줄바꿈 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 [hidden] { display: none !important; }
 a { color: var(--accent); }
@@ -183,10 +186,34 @@ html.nv-green .nv-overlay { display: block; background: #00a000; }
 }
 .page-head { display: grid; gap: 6px; max-width: 62ch; }
 .page-head h2 { font-size: 1.4rem; line-height: 1.3; }
-.setup-grid { display: grid; gap: var(--gap); }
-@media (min-width: 720px) { .setup-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
-.setup-grid .panel { display: grid; gap: 10px; align-content: start; }
-.setup-grid h3 { font-size: 0.95rem; font-weight: 600; }
+.setup-card { display: grid; gap: 0; padding-block: 4px; }
+.setup-block { display: grid; gap: 10px; align-content: start; padding-block: 14px; min-width: 0; }
+.setup-block + .setup-block { border-top: 1px solid var(--line); }
+.setup-card h3, .lens-card h3 { font-size: 0.95rem; font-weight: 600; }
+.wx-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.lens-card { display: grid; gap: 10px; }
+.target-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (min-width: 720px) { .target-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.target-card {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  text-align: left;
+  min-width: 0;
+  padding: 14px 14px 12px;
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.target-card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.target-card[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+.tc-name { font-family: var(--font-display); font-size: 1.15rem; }
+.tc-desc { color: var(--muted); font-size: 0.78rem; line-height: 1.4; }
+.tc-status { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin-top: 6px; font-size: 0.76rem; color: var(--muted); }
+.tc-status .pill { font-size: 0.72rem; padding: 1px 8px; }
 .setup-next { display: grid; gap: 10px; max-width: 520px; }
 .setup-summary { color: var(--muted); font-size: 0.85rem; }
 .btn.wide { width: 100%; padding-block: 12px; font-size: 1rem; }
@@ -495,7 +522,7 @@ label { display: grid; gap: 4px; font-size: 0.8rem; color: var(--muted); }
   border-top: 1px solid var(--line);
 }
 .timebar { display: flex; align-items: center; gap: 10px; min-height: 56px; border-bottom: 1px solid var(--line); }
-.pagetabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.pagetabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .pagetabs button {
   display: grid;
   justify-items: center;
