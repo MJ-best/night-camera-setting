@@ -26,17 +26,20 @@ const DEFAULTS = {
   bortle: 4,
   declination: null,
   skyMode: 'pano',
-  nightVision: false,
+  screenMode: 'normal',
   places: [],
   lenses: Object.fromEntries(Object.entries(cam.TARGETS).map(([k, v]) => [k, { ...v.lens }])),
 };
-const PERSIST = ['target', 'lat', 'lon', 'locSource', 'placeName', 'sensor', 'mp', 'bortle', 'declination', 'skyMode', 'nightVision', 'places', 'lenses'];
+const PERSIST = ['target', 'lat', 'lon', 'locSource', 'placeName', 'sensor', 'mp', 'bortle', 'declination', 'skyMode', 'screenMode', 'places', 'lenses'];
 
 function loadState() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) {
       const saved = JSON.parse(raw);
+      // 예전 버전은 적색 모드를 nightVision(true/false)으로 저장했다
+      if (!saved.screenMode && saved.nightVision) saved.screenMode = 'red';
+      delete saved.nightVision;
       return { ...DEFAULTS, ...saved, lenses: { ...DEFAULTS.lenses, ...(saved.lenses || {}) } };
     }
   } catch { /* 저장소를 못 쓰는 환경 */ }
@@ -960,7 +963,7 @@ function bind() {
   $('recenter').addEventListener('click', () => skyMap.recenter());
 
   $('nightVision').addEventListener('click', () => {
-    state.nightVision = !state.nightVision;
+    state.screenMode = SCREEN_MODES[state.screenMode]?.next || 'red';
     applyNightVision();
     saveState();
   });
@@ -995,9 +998,24 @@ function bind() {
   });
 }
 
+// 버튼을 누를 때마다 기본 → 적색 → 녹색 → 기본
+const SCREEN_MODES = {
+  normal: { next: 'red', label: '적색 모드', title: '누르면 적색 화면으로 바뀌어요 (눈의 암적응 유지)' },
+  red: { next: 'green', label: '적색 모드', title: '적색 화면 사용 중 · 누르면 녹색 화면으로 바뀌어요' },
+  green: { next: 'normal', label: '녹색 모드', title: '녹색 화면 사용 중 · 누르면 기본 화면으로 돌아가요' },
+};
+
 function applyNightVision() {
-  document.documentElement.classList.toggle('nv', state.nightVision);
-  $('nightVision').setAttribute('aria-pressed', String(state.nightVision));
+  if (!SCREEN_MODES[state.screenMode]) state.screenMode = 'normal';
+  const mode = SCREEN_MODES[state.screenMode];
+  const root = document.documentElement.classList;
+  root.toggle('nv-red', state.screenMode === 'red');
+  root.toggle('nv-green', state.screenMode === 'green');
+  const btn = $('nightVision');
+  btn.dataset.mode = state.screenMode;
+  btn.setAttribute('aria-pressed', String(state.screenMode !== 'normal'));
+  btn.title = mode.title;
+  btn.querySelector('span').textContent = mode.label;
 }
 
 function setLocation(lat, lon, source, name) {

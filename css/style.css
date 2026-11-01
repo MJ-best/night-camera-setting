@@ -72,7 +72,7 @@ button, input, select { font: inherit; color: inherit; }
   padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 
-/* ── 적색 야간 모드: 화면 전체를 빨간 채널만 남긴다 ── */
+/* ── 야간 화면 모드: 곱하기 합성으로 화면 전체를 한 색 채널만 남긴다 ── */
 .nv-overlay {
   position: fixed;
   inset: 0;
@@ -82,7 +82,8 @@ button, input, select { font: inherit; color: inherit; }
   z-index: 1000;
   display: none;
 }
-html.nv .nv-overlay { display: block; }
+html.nv-red .nv-overlay { display: block; background: #b30000; }
+html.nv-green .nv-overlay { display: block; background: #00a000; }
 
 /* ── 상단 ── */
 .topbar {
@@ -121,7 +122,8 @@ html.nv .nv-overlay { display: block; }
   cursor: pointer;
 }
 .nv-btn svg { width: 17px; height: 17px; }
-.nv-btn[aria-pressed='true'] { color: #ff6b5a; border-color: #ff6b5a; }
+.nv-btn[data-mode='red'] { color: #ff6b5a; border-color: #ff6b5a; }
+.nv-btn[data-mode='green'] { color: #5fe07a; border-color: #5fe07a; }
 
 .targets {
   display: flex;
