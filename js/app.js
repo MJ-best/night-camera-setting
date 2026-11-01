@@ -3,7 +3,7 @@ import * as astro from './astro.js';
 import * as cam from './camera.js';
 import { SkyMap } from './skymap.js';
 import { renderTimeline } from './chart.js';
-import { fetchWeather, summarize } from './weather.js';
+import { fetchWeather, summarize, packRows, unpackRows, isNearby, WEATHER_TTL_MS } from './weather.js';
 import { Compass, compassSupported, defaultDeclination } from './compass.js';
 import { STARS, METEOR_SHOWERS, PLANETS } from './data.js';
 import {
@@ -13,6 +13,7 @@ import {
 
 const $ = (id) => document.getElementById(id);
 const STORE_KEY = 'night-camera-setting:v1';
+const WEATHER_KEY = 'night-camera-setting:weather';
 const PLANET_DIAMETER_KM = { Mercury: 4879, Venus: 12104, Mars: 6779, Jupiter: 142984, Saturn: 120536 };
 
 const DEFAULTS = {
@@ -26,17 +27,20 @@ const DEFAULTS = {
   bortle: 4,
   declination: null,
   skyMode: 'pano',
-  nightVision: false,
+  screenMode: 'normal',
   places: [],
   lenses: Object.fromEntries(Object.entries(cam.TARGETS).map(([k, v]) => [k, { ...v.lens }])),
 };
-const PERSIST = ['target', 'lat', 'lon', 'locSource', 'placeName', 'sensor', 'mp', 'bortle', 'declination', 'skyMode', 'nightVision', 'places', 'lenses'];
+const PERSIST = ['target', 'lat', 'lon', 'locSource', 'placeName', 'sensor', 'mp', 'bortle', 'declination', 'skyMode', 'screenMode', 'places', 'lenses'];
 
 function loadState() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) {
       const saved = JSON.parse(raw);
+      // 예전 버전은 적색 모드를 nightVision(true/false)으로 저장했다
+      if (!saved.screenMode && saved.nightVision) saved.screenMode = 'red';
+      delete saved.nightVision;
       return { ...DEFAULTS, ...saved, lenses: { ...DEFAULTS.lenses, ...(saved.lenses || {}) } };
     }
   } catch { /* 저장소를 못 쓰는 환경 */ }
@@ -59,7 +63,7 @@ const state = {
 
 let night = null;
 let analysis = {};
-let weather = { key: null, rows: null, status: 'idle', error: null };
+let weather = { lat: null, lon: null, at: 0, rows: null, status: 'idle', error: null };
 let scan = { key: null, rows: null };
 let heading = null;
 let timelineApi = null;
@@ -85,8 +89,8 @@ function recompute() {
   state.userTime = false;
   setupSlider();
   renderAll();
-  loadWeather();
-  scheduleScan();
+  // 30일 계산은 그 페이지를 볼 때만 한다
+  if (currentPage === PAGE.tonight || scan.rows) scheduleScan();
 }
 
 function midOf(iv) {
@@ -223,6 +227,7 @@ function focusStar(snap) {
 function renderAll() {
   renderContext();
   renderVerdict();
+  renderTargets();
   renderTimeDependent();
   renderExtra();
   renderCalendar();
@@ -253,9 +258,8 @@ function renderTimeDependent() {
 function renderContext() {
   const where = state.placeName || formatCoord(state.lat, state.lon);
   const start = astro.nightStart(state.date);
-  $('contextLine').textContent = `${where} · ${formatDate(start, { weekday: false })} 밤`;
+  $('contextLine').textContent = `${where} · ${formatDate(start, { weekday: false })} 밤 · ${cam.TARGETS[state.target].label}`;
   const l = lens();
-  $('condSummary').textContent = `${where} · ${formatDate(start)} 밤 · ${cam.sensorOf(state.sensor).label} ${l.focal}mm f/${l.maxAperture} · 광해 ${state.bortle}`;
   $('lat').value = state.lat.toFixed(4);
   $('lon').value = state.lon.toFixed(4);
   $('date').value = state.date;
@@ -268,11 +272,17 @@ function renderContext() {
   $('bortle').value = String(state.bortle);
   $('lensFor').textContent = `· ${cam.TARGETS[state.target].label}용`;
   $('declination').value = String(declination());
-  document.querySelectorAll('.targets button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.target === state.target)));
   document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === state.skyMode)));
   $('panHint').hidden = state.skyMode !== 'pano';
   $('recenter').hidden = state.skyMode !== 'pano';
   renderPlaces();
+  renderSetupSummary();
+}
+
+function renderSetupSummary() {
+  const where = state.placeName || formatCoord(state.lat, state.lon);
+  const start = astro.nightStart(state.date);
+  $('setupSummary').textContent = `${where} · ${formatDate(start)} 밤 · ${cam.sensorOf(state.sensor).label} ${state.mp}MP · 광해 ${state.bortle}`;
 }
 
 function renderPlaces() {
@@ -316,15 +326,15 @@ function moonLine() {
   return up ? `${parts[0]}, 밤새 하늘에 있어요.` : `${parts[0]}, 밤에는 뜨지 않아요.`;
 }
 
-function verdictData() {
+function verdictData(t = state.target) {
   const s = night.start;
-  const t = state.target;
   if (t === 'milkyway') {
     const mw = analysis.mw;
     if (!mw.best) {
       return {
         level: 'bad', title: '은하수 촬영이 어려운 밤',
         lines: [night.hasAstroDark ? '어두운 시간대에 은하수가 지평선 가까이 낮게만 있어요.' : '이 날짜·위도는 밤에도 하늘이 완전히 어두워지지 않아요.', moonLine()],
+        short: night.hasAstroDark ? '은하수가 낮게만 떠요' : '하늘이 충분히 어둡지 않아요',
       };
     }
     const r = mw.best.region;
@@ -341,7 +351,8 @@ function verdictData() {
         ? '은하수 중심부(궁수자리)는 해가 진 뒤엔 이미 낮거나 지평선 아래예요. 한국에서는 3~10월, 특히 5~8월이 은하수 중심 시즌이에요.'
         : '은하수 중심부(궁수자리)는 이 시기 밤에 뜨지 않아요. 한국에서는 3~10월, 특히 5~8월이 은하수 중심 시즌이에요.');
     }
-    return { level, title: `은하수 ${level === 'good' ? '촬영하기 좋은 밤' : level === 'ok' ? '촬영 가능' : '조건이 아쉬운 밤'}`, lines, windows: mw.regionWindows };
+    const short = win ? `${r.short} ${formatRange(win, s)}` : `${r.short} · 달빛과 겹침`;
+    return { level, title: `은하수 ${level === 'good' ? '촬영하기 좋은 밤' : level === 'ok' ? '촬영 가능' : '조건이 아쉬운 밤'}`, lines, windows: mw.regionWindows, short };
   }
   if (t === 'moon') {
     const m = night.moon;
@@ -353,7 +364,7 @@ function verdictData() {
     if (analysis.moon.lowMoon && analysis.moon.lowMoon.sunAlt < 0) lines.push(`월출 직후 ${formatNightTime(analysis.moon.lowMoon.t, s)}에는 지평선 가까이 큰 달과 풍경을 함께 담을 수 있어요.`);
     lines.push(`다음 보름 ${formatDate(night.nextFull)} · 다음 삭 ${formatDate(night.nextNew)}`);
     const wins = astro.intervals(night.samples, (x) => x.moon.alt > 10 && x.sun.alt < -4);
-    return { level, title: level === 'bad' ? '달 촬영이 어려운 밤' : `${m.name} 촬영`, lines, windows: wins };
+    return { level, title: level === 'bad' ? '달 촬영이 어려운 밤' : `${m.name} 촬영`, lines, windows: wins, short: `${m.name} ${Math.round(m.illum * 100)}%` };
   }
   if (t === 'startrails') {
     const dark = astro.totalMinutes(night.darkWindows);
@@ -366,7 +377,7 @@ function verdictData() {
       `${pole}은 ${southern() ? '남쪽' : '북쪽'} 고도 약 ${polarAlt}°에 있어 그 주위로 동심원이 그려져요.`,
       moonLine(),
     ];
-    return { level, title: `별궤적 ${level === 'good' ? '촬영하기 좋은 밤' : level === 'ok' ? '촬영 가능' : '어두운 시간이 짧은 밤'}`, lines, windows: night.moonlessDark };
+    return { level, title: `별궤적 ${level === 'good' ? '촬영하기 좋은 밤' : level === 'ok' ? '촬영 가능' : '어두운 시간이 짧은 밤'}`, lines, windows: night.moonlessDark, short: `달 없는 어둠 ${formatDuration(ml)}` };
   }
   if (t === 'meteor') {
     const sh = analysis.shower;
@@ -388,7 +399,8 @@ function verdictData() {
     ];
     const radAlt = new Map(analysis.meteor.radiant.map((r) => [r.t.getTime(), r.alt]));
     const wins = astro.intervals(night.samples, (x) => x.sun.alt < night.darkThreshold && radAlt.get(x.t.getTime()) > 20);
-    return { level, title: `${sh.name}`, lines, windows: wins };
+    const whenShort = days > 1.5 ? `극대 ${Math.round(days)}일 후` : days < -1.5 ? `극대 ${Math.round(-days)}일 지남` : '극대 무렵';
+    return { level, title: `${sh.name}`, lines, windows: wins, short: `${sh.name.replace(/ 유성우$/, '')} · ${whenShort}` };
   }
   if (t === 'planets') {
     const vis = analysis.planets.filter((p) => p.visible);
@@ -398,7 +410,7 @@ function verdictData() {
       : ['어두운 시간에 잘 보이는 밝은 행성이 없어요.'];
     const fp = featuredPlanet();
     const wins = fp ? astro.intervals(night.samples, (x) => x.sun.alt < -6 && x.planets[fp.body].alt > 10) : [];
-    return { level, title: vis.length ? `오늘 밤 보이는 행성 ${vis.length}개` : '행성 보기 어려운 밤', lines, windows: wins };
+    return { level, title: vis.length ? `오늘 밤 보이는 행성 ${vis.length}개` : '행성 보기 어려운 밤', lines, windows: wins, short: vis.length ? vis.map((p) => p.name).join('·') : '밝은 행성 없음' };
   }
   // 도시 야경
   const ev = night.events;
@@ -409,13 +421,40 @@ function verdictData() {
   const wins = [];
   if (ev.blueStart && ev.civilDusk) wins.push({ start: ev.blueStart, end: ev.civilDusk });
   if (ev.civilDawn && ev.blueEnd) wins.push({ start: ev.civilDawn, end: ev.blueEnd });
-  return { level: 'good', title: '블루아워 야경', lines: lines.length ? lines : ['이 날짜·위도에서는 블루아워가 뚜렷하지 않아요.'], windows: wins };
+  return { level: 'good', title: '블루아워 야경', lines: lines.length ? lines : ['이 날짜·위도에서는 블루아워가 뚜렷하지 않아요.'], windows: wins, short: ev.blueStart ? `블루아워 ${formatTime(ev.blueStart)}` : '블루아워 없음' };
+}
+
+const LEVEL_LABEL = { good: '좋음', ok: '보통', bad: '어려움' };
+
+/** 천문 판정에 구름 예보를 반영한다 */
+function judge(t = state.target) {
+  const v = verdictData(t);
+  const wx = nightWeather();
+  let level = v.level;
+  if (wx && t !== 'city') {
+    if (wx.cloud >= 70) level = 'bad';
+    else if (wx.cloud >= 45 && level === 'good') level = 'ok';
+  }
+  return { v, wx, level, label: LEVEL_LABEL[level] };
+}
+
+function renderTargets() {
+  document.querySelectorAll('.target-card').forEach((card) => {
+    const t = card.dataset.target;
+    card.setAttribute('aria-pressed', String(t === state.target));
+    if (!night) return;
+    const j = judge(t);
+    card.querySelector('.tc-status').innerHTML = `<span class="pill ${j.level}">${j.label}</span><span>${escapeHtml(j.v.short || '')}</span>`;
+  });
+  const wx = nightWeather();
+  $('situationHint').textContent = wx
+    ? `카드마다 오늘 밤 조건을 미리 보여 드려요. 예보상 밤 평균 구름 ${Math.round(wx.cloud)}%를 반영했어요.`
+    : '카드마다 오늘 밤 조건을 미리 보여 드려요. 날씨 예보가 없으면 천문 조건만 봐요.';
+  $('toSettings').textContent = `${cam.TARGETS[state.target].label} 촬영 설정 보기 →`;
 }
 
 function renderVerdict() {
-  const v = verdictData();
-  const wx = nightWeather();
-  let level = v.level;
+  const { v, wx, level, label } = judge();
   const chips = [];
   const ev = night.events;
   if (night.hasAstroDark && night.darkWindows.length) {
@@ -428,12 +467,11 @@ function renderVerdict() {
     chips.push(`<span class="chip">구름 <b>${Math.round(wx.cloud)}%</b> ${wx.sky}</span>`);
     if (wx.dewRisk) chips.push('<span class="chip">이슬 주의</span>');
     if (wx.maxWind >= 6) chips.push(`<span class="chip">바람 <b>${wx.maxWind.toFixed(0)}m/s</b></span>`);
-    if (wx.cloud >= 70 && state.target !== 'city') level = 'bad';
-    else if (wx.cloud >= 45 && level === 'good') level = 'ok';
   } else if (weather.status === 'loading') {
     chips.push('<span class="chip">날씨 불러오는 중…</span>');
+  } else if (!weather.rows) {
+    chips.push('<span class="chip">날씨 정보 없음</span>');
   }
-  const label = { good: '좋음', ok: '보통', bad: '어려움' }[level];
   const lines = [...v.lines];
   if (wx && wx.cloud >= 45 && state.target !== 'city') lines.unshift(`예보상 구름이 많아요 (평균 ${Math.round(wx.cloud)}%). 가장 맑은 때는 ${formatTime(wx.clearest.t)} 무렵 ${Math.round(wx.clearest.cloud)}%예요.`);
   $('verdict').innerHTML = `
@@ -732,7 +770,10 @@ function scheduleScan() {
 
 function renderCalendar() {
   const el = $('calStrip');
-  if (!scan.rows) { el.innerHTML = '<p class="hint">날짜별 조건을 계산하는 중…</p>'; return; }
+  if (!scan.rows) {
+    el.innerHTML = `<p class="hint">${scan.key ? '날짜별 조건을 계산하는 중…' : '이 페이지를 열면 날짜별 조건을 계산해요.'}</p>`;
+    return;
+  }
   const t = state.target;
   const metric = {
     milkyway: [(r) => r.core || r.band * 0.6, 300, '은하수 + 달 없는 어둠'],
@@ -831,49 +872,137 @@ function setSelected(date) {
   raf = requestAnimationFrame(() => renderTimeDependent());
 }
 
-/* 날씨 */
-async function loadWeather() {
-  const key = `${state.lat.toFixed(2)},${state.lon.toFixed(2)}`;
-  const daysAhead = (astro.nightStart(state.date) - Date.now()) / astro.DAY;
-  if (daysAhead > 15 || daysAhead < -2) {
-    weather = { key, rows: weather.key === key ? weather.rows : null, status: 'range' };
-    renderWeatherInfo();
+/* 날씨: 위치가 정해질 때(준비 페이지)만 받는다. 받은 예보는 기기에 저장해 3시간 동안 다시 쓴다 */
+function readWeatherCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(WEATHER_KEY));
+    const rows = c && unpackRows(c.data);
+    return rows && rows.length ? { lat: c.lat, lon: c.lon, at: c.at, rows } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeWeatherCache(w) {
+  try {
+    localStorage.setItem(WEATHER_KEY, JSON.stringify({ lat: w.lat, lon: w.lon, at: w.at, data: packRows(w.rows) }));
+  } catch { /* 저장 공간이 없으면 이번 세션만 쓴다 */ }
+}
+
+let weatherRequest = 0;
+async function ensureWeather({ force = false } = {}) {
+  const here = { lat: state.lat, lon: state.lon };
+  const cached = weather.rows && isNearby(weather, here) ? weather : readWeatherCache();
+  const usable = cached && isNearby(cached, here) ? cached : null;
+  if (usable) {
+    weather = { ...usable, status: 'ok', error: null };
+    if (!force && Date.now() - usable.at < WEATHER_TTL_MS) { onWeatherChanged(); return; }
+  } else {
+    weather = { ...here, at: 0, rows: null, status: 'idle', error: null };
+  }
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    weather.status = usable ? 'stale' : 'offline';
+    onWeatherChanged();
     return;
   }
-  if (weather.key === key && weather.rows) { renderWeatherInfo(); return; }
-  weather = { key, rows: null, status: 'loading' };
-  renderWeatherInfo();
+  const req = ++weatherRequest;
+  weather.status = 'loading';
+  renderWeatherStatus();
   try {
-    const rows = await fetchWeather(state.lat, state.lon);
-    if (weather.key !== key) return;
-    weather = { key, rows, status: 'ok' };
+    const rows = await fetchWeather(here.lat, here.lon);
+    if (req !== weatherRequest) return;
+    weather = { ...here, at: Date.now(), rows, status: 'ok', error: null };
+    writeWeatherCache(weather);
   } catch (err) {
-    if (weather.key !== key) return;
-    weather = { key, rows: null, status: 'error', error: err.message };
+    if (req !== weatherRequest) return;
+    weather = usable ? { ...usable, status: 'stale', error: err.message } : { ...here, at: 0, rows: null, status: 'error', error: err.message };
   }
+  onWeatherChanged();
+}
+
+function onWeatherChanged() {
+  renderWeatherStatus();
+  if (!night) return;
   renderVerdict();
+  renderTargets();
   renderTimelinePanel();
   renderWeatherInfo();
+}
+
+function ago(ms) {
+  const min = Math.max(0, Math.round((Date.now() - ms) / astro.MINUTE));
+  if (min < 1) return '방금';
+  if (min < 60) return `${min}분 전`;
+  return `${Math.round(min / 60)}시간 전`;
+}
+
+function renderWeatherStatus() {
+  const el = $('wxStatus');
+  const btn = $('wxRefresh');
+  btn.disabled = weather.status === 'loading';
+  const got = weather.at ? `${formatTime(new Date(weather.at))}에 받은 예보 (${ago(weather.at)})` : '';
+  const wx = nightWeather();
+  const tonight = wx ? ` · 이 날 밤 구름 <b>${Math.round(wx.cloud)}%</b> ${escapeHtml(wx.sky)}` : weather.rows ? ' · 고른 날짜는 예보 범위(16일) 밖이에요' : '';
+  const msg = {
+    idle: state.locSource === 'default' ? '위치를 정하면 그곳의 예보를 받아요.' : '아직 받지 않았어요.',
+    loading: '예보를 받는 중…',
+    ok: `${got}${tonight}`,
+    stale: `새로 받지 못해 저장된 예보를 써요. ${got}${tonight}`,
+    offline: '오프라인이에요. 인터넷이 될 때 ‘예보 다시 받기’를 누르세요. 천문 계산은 그대로 돼요.',
+    error: '예보를 받지 못했어요. 인터넷 연결을 확인하고 다시 받아 보세요. 천문 계산은 그대로 돼요.',
+  }[weather.status];
+  el.innerHTML = msg;
 }
 
 function renderWeatherInfo() {
   const el = $('weatherInfo');
   const badge = $('weatherBadge');
-  if (weather.status === 'loading') { badge.textContent = '날씨 불러오는 중…'; el.textContent = ''; return; }
-  if (weather.status === 'range') { badge.textContent = ''; el.textContent = '날씨 예보는 16일 이내 날짜만 볼 수 있어요.'; return; }
-  if (weather.status === 'error') { badge.textContent = '날씨 없음'; el.textContent = '날씨를 불러오지 못했어요 (오프라인일 수 있어요). 천문 계산은 그대로 쓸 수 있어요.'; return; }
   const wx = nightWeather();
-  if (!wx) { badge.textContent = ''; el.textContent = ''; return; }
+  if (!wx) {
+    badge.textContent = weather.status === 'loading' ? '날씨 불러오는 중…' : '';
+    el.textContent = weather.rows
+      ? '이 날짜는 날씨 예보 범위(16일) 밖이에요.'
+      : weather.status === 'loading' ? '' : '날씨 예보가 없어요. 준비 페이지에서 받을 수 있어요. 천문 계산은 그대로 돼요.';
+    return;
+  }
   badge.textContent = `구름 ${Math.round(wx.cloud)}% · ${wx.sky}`;
   const bits = [`밤 동안 평균 구름 ${Math.round(wx.cloud)}%`, `최저 ${Math.round(wx.minTemp)}°C`, `습도 ${Math.round(wx.rh)}%`, `최대 풍속 ${wx.maxWind.toFixed(1)}m/s`];
   if (wx.dewRisk) bits.push('기온과 이슬점이 가까워 렌즈에 이슬이 맺히기 쉬워요. 렌즈 히터를 챙기세요');
-  el.textContent = `${bits.join(' · ')}. (Open-Meteo 예보)`;
+  el.textContent = `${bits.join(' · ')}. (Open-Meteo 예보, ${ago(weather.at)} 받음)`;
+}
+
+/* 페이지 넘기기 */
+const PAGE = { setup: 0, situation: 1, settings: 2, sky: 3, tonight: 4, ref: 5 };
+let currentPage = 0;
+
+function pageCount() {
+  return $('pager').children.length;
+}
+
+function goToPage(i, { smooth = true } = {}) {
+  const pager = $('pager');
+  const idx = Math.max(0, Math.min(pageCount() - 1, i));
+  pager.scrollTo({ left: idx * pager.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+  setPage(idx);
+}
+
+function setPage(i) {
+  const changed = i !== currentPage;
+  currentPage = i;
+  document.querySelectorAll('#pageTabs button').forEach((b) => {
+    if (Number(b.dataset.goto) === i) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
+  $('timebar').hidden = i === PAGE.setup || i === PAGE.situation || i === PAGE.ref;
+  if (!changed) return;
+  if (i === PAGE.tonight) scheduleScan();
+  if (i === PAGE.sky) skyMap.render();
 }
 
 /* ───────────── 이벤트 ───────────── */
 
 function bind() {
-  document.querySelectorAll('.targets button').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('.target-card').forEach((b) => b.addEventListener('click', () => {
     state.target = b.dataset.target;
     saveState();
     state.selected = bestTime();
@@ -960,7 +1089,7 @@ function bind() {
   $('recenter').addEventListener('click', () => skyMap.recenter());
 
   $('nightVision').addEventListener('click', () => {
-    state.nightVision = !state.nightVision;
+    state.screenMode = SCREEN_MODES[state.screenMode]?.next || 'red';
     applyNightVision();
     saveState();
   });
@@ -988,16 +1117,53 @@ function bind() {
     }
   });
 
+  const pager = $('pager');
+  let pageRaf = 0;
+  pager.addEventListener('scroll', () => {
+    cancelAnimationFrame(pageRaf);
+    pageRaf = requestAnimationFrame(() => {
+      const i = Math.round(pager.scrollLeft / Math.max(1, pager.clientWidth));
+      if (i !== currentPage) setPage(i);
+    });
+  }, { passive: true });
+  document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => goToPage(Number(b.dataset.goto))));
+  document.addEventListener('keydown', (e) => {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (e.target.closest && e.target.closest('input, select, textarea, [contenteditable]')) return;
+    if (e.key === 'ArrowRight') { e.preventDefault(); goToPage(currentPage + 1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); goToPage(currentPage - 1); }
+  });
+  $('wxRefresh').addEventListener('click', () => ensureWeather({ force: true }));
+
   let resizeTimer = 0;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { skyMap.render(); renderTimelinePanel(); }, 120);
+    resizeTimer = setTimeout(() => {
+      pager.scrollTo({ left: currentPage * pager.clientWidth, behavior: 'auto' });
+      skyMap.render();
+      renderTimelinePanel();
+    }, 120);
   });
 }
 
+// 버튼을 누를 때마다 기본 → 적색 → 녹색 → 기본
+const SCREEN_MODES = {
+  normal: { next: 'red', label: '적색 모드', title: '누르면 적색 화면으로 바뀌어요 (눈의 암적응 유지)' },
+  red: { next: 'green', label: '적색 모드', title: '적색 화면 사용 중 · 누르면 녹색 화면으로 바뀌어요' },
+  green: { next: 'normal', label: '녹색 모드', title: '녹색 화면 사용 중 · 누르면 기본 화면으로 돌아가요' },
+};
+
 function applyNightVision() {
-  document.documentElement.classList.toggle('nv', state.nightVision);
-  $('nightVision').setAttribute('aria-pressed', String(state.nightVision));
+  if (!SCREEN_MODES[state.screenMode]) state.screenMode = 'normal';
+  const mode = SCREEN_MODES[state.screenMode];
+  const root = document.documentElement.classList;
+  root.toggle('nv-red', state.screenMode === 'red');
+  root.toggle('nv-green', state.screenMode === 'green');
+  const btn = $('nightVision');
+  btn.dataset.mode = state.screenMode;
+  btn.setAttribute('aria-pressed', String(state.screenMode !== 'normal'));
+  btn.title = mode.title;
+  btn.querySelector('span').textContent = mode.label;
 }
 
 function setLocation(lat, lon, source, name) {
@@ -1007,6 +1173,7 @@ function setLocation(lat, lon, source, name) {
   state.placeName = name;
   saveState();
   recompute();
+  ensureWeather();
 }
 
 function locate() {
@@ -1023,7 +1190,6 @@ function locate() {
     const { latitude, longitude, accuracy } = pos.coords;
     status.textContent = `현재 위치를 찾았어요 (정확도 약 ${Math.round(accuracy)}m).`;
     setLocation(latitude, longitude, 'gps', '현재 위치');
-    $('conditions').open = false;
   }, (err) => {
     btn.disabled = false;
     const msg = {
@@ -1043,8 +1209,11 @@ function init() {
   bind();
   skyMap.mode = state.skyMode;
   applyNightVision();
-  if (state.locSource === 'default') $('conditions').open = true;
+  setPage(PAGE.setup);
   recompute();
+  // 예시 위치(서울)로는 예보를 받지 않는다. 위치를 정하면 그때 받는다
+  if (state.locSource !== 'default') ensureWeather();
+  else renderWeatherStatus();
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
