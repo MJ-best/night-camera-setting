@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { azimuthName, moonPhasePath, formatNightTime, signedDeg } from '../js/format.js';
-import { parseWeather, summarize, weatherUrl } from '../js/weather.js';
+import { parseWeather, summarize, weatherUrl, packRows, unpackRows, isNearby } from '../js/weather.js';
 
 test('방위 이름', () => {
   assert.equal(azimuthName(0), '북');
@@ -45,4 +45,19 @@ test('Open-Meteo 응답 파싱과 밤 요약', () => {
   assert.equal(all.clearest.cloud, 10);
   assert.equal(summarize(rows, new Date(0), new Date(1000)), null);
   assert.match(weatherUrl(37.5, 127), /cloud_cover/);
+});
+
+test('저장용 압축·복원은 값을 그대로 돌려준다', () => {
+  const rows = [
+    { t: new Date(Date.UTC(2026, 10, 1, 12)), cloud: 20, rh: 80, dew: 5, temp: 9, wind: 2.1 },
+    { t: new Date(Date.UTC(2026, 10, 1, 13)), cloud: 35, rh: 85, dew: 5.5, temp: 8, wind: null },
+  ];
+  const back = unpackRows(JSON.parse(JSON.stringify(packRows(rows))));
+  assert.deepEqual(back, rows);
+  assert.equal(unpackRows(null), null);
+});
+
+test('5km 안쪽이면 같은 예보를 다시 쓴다', () => {
+  assert.equal(isNearby({ lat: 37.56, lon: 126.97 }, { lat: 37.58, lon: 126.99 }), true);
+  assert.equal(isNearby({ lat: 37.56, lon: 126.97 }, { lat: 37.62, lon: 128.73 }), false);
 });

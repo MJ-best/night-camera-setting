@@ -1,6 +1,10 @@
-// Open-Meteo 예보 (무료·키 불필요). 오프라인이거나 16일 넘는 날짜면 null
-const CACHE_MS = 60 * 60 * 1000;
-const memory = new Map();
+// Open-Meteo 예보 (무료·키 불필요). 한 번 받으면 16일치가 오므로 날짜를 바꿔도 다시 받지 않는다.
+
+/** 받은 예보를 다시 쓰는 시간 */
+export const WEATHER_TTL_MS = 3 * 60 * 60 * 1000;
+
+/** 같은 예보를 써도 되는 거리 (위경도 약 0.05° ≈ 5km) */
+export const isNearby = (a, b) => Math.abs(a.lat - b.lat) < 0.05 && Math.abs(a.lon - b.lon) < 0.05;
 
 export function weatherUrl(lat, lon) {
   const params = new URLSearchParams({
@@ -37,15 +41,29 @@ export function parseWeather(json) {
 }
 
 export async function fetchWeather(lat, lon, { signal } = {}) {
-  const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
-  const hit = memory.get(key);
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.rows;
-  const res = await fetch(weatherUrl(lat, lon), { signal });
+  const res = await fetch(weatherUrl(lat, lon), { signal, cache: 'no-store' });
   if (!res.ok) throw new Error(`날씨 서버 응답 ${res.status}`);
   const rows = parseWeather(await res.json());
   if (!rows || !rows.length) throw new Error('날씨 데이터가 비어 있어요');
-  memory.set(key, { at: Date.now(), rows });
   return rows;
+}
+
+const PACK_KEYS = ['cloud', 'rh', 'dew', 'temp', 'wind'];
+
+/** 기기 저장용으로 열 단위로 압축 (약 400시간 × 6값) */
+export function packRows(rows) {
+  const out = { t: rows.map((r) => Math.round(r.t.getTime() / 1000)) };
+  for (const k of PACK_KEYS) out[k] = rows.map((r) => r[k]);
+  return out;
+}
+
+export function unpackRows(packed) {
+  if (!packed || !Array.isArray(packed.t)) return null;
+  return packed.t.map((sec, i) => {
+    const row = { t: new Date(sec * 1000) };
+    for (const k of PACK_KEYS) row[k] = packed[k]?.[i] ?? null;
+    return row;
+  });
 }
 
 /** 주어진 구간의 날씨 요약 */
