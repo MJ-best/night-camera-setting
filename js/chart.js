@@ -1,5 +1,6 @@
 // 밤 동안의 고도 변화 차트 (SVG)
 import { twilightLevel } from './astro.js';
+import { zoned } from './format.js';
 
 const TW_FILL = ['var(--tw-day)', 'var(--tw-civil)', 'var(--tw-nautical)', 'var(--tw-astro)', 'transparent'];
 
@@ -85,14 +86,14 @@ export function renderTimeline(el, opts) {
   const hourMs = 3_600_000;
   const span = (to - from) / hourMs;
   const stepH = W / span < 34 ? 2 : 1;
-  const firstHour = new Date(from);
-  firstHour.setMinutes(0, 0, 0);
-  for (let t = firstHour.getTime() + hourMs; t <= to; t += hourMs) {
-    const d = new Date(t);
-    if (d.getHours() % stepH) continue;
+  // 현지 시각의 정각마다 눈금 (30분 단위 시간대도 정각에 맞춘다)
+  const pastHour = zoned(new Date(from)).getTime() % hourMs;
+  for (let t = from - pastHour + hourMs; t <= to; t += hourMs) {
+    const h = zoned(new Date(t)).getUTCHours();
+    if (h % stepH) continue;
     const xx = x(t).toFixed(1);
     parts.push(`<line x1="${xx}" x2="${xx}" y1="${padT + plotH}" y2="${padT + plotH + 4}" stroke="var(--chart-grid)"/>`);
-    parts.push(`<text x="${xx}" y="${axisY}" text-anchor="middle" class="ax">${String(d.getHours()).padStart(2, '0')}</text>`);
+    parts.push(`<text x="${xx}" y="${axisY}" text-anchor="middle" class="ax">${String(h).padStart(2, '0')}</text>`);
   }
 
   // 선택 시각

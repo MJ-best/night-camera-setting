@@ -16,7 +16,7 @@ export function weatherUrl(lat, lon) {
     ].join(','),
     wind_speed_unit: 'ms',
     timeformat: 'unixtime',
-    timezone: 'UTC',
+    timezone: 'auto', // 응답에 그 장소의 시간대가 함께 온다 (시각 값은 unixtime이라 그대로 UTC)
     past_days: '1',
     forecast_days: '16',
   });
@@ -40,12 +40,14 @@ export function parseWeather(json) {
   })).filter((r) => r.cloud != null);
 }
 
+/** @returns {{rows: Array, tz: string|null}} tz: 그 장소의 IANA 시간대 */
 export async function fetchWeather(lat, lon, { signal } = {}) {
   const res = await fetch(weatherUrl(lat, lon), { signal, cache: 'no-store' });
   if (!res.ok) throw new Error(`날씨 서버 응답 ${res.status}`);
-  const rows = parseWeather(await res.json());
+  const json = await res.json();
+  const rows = parseWeather(json);
   if (!rows || !rows.length) throw new Error('날씨 데이터가 비어 있어요');
-  return rows;
+  return { rows, tz: typeof json.timezone === 'string' ? json.timezone : null };
 }
 
 const PACK_KEYS = ['cloud', 'rh', 'dew', 'temp', 'wind'];
