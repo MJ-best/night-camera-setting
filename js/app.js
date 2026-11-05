@@ -109,11 +109,22 @@ function featuredPlanet() {
   return list.find((p) => p.visible) || null;
 }
 
+/** 추천 시각은 항상 시간 막대(밤 차트) 범위 안에 둔다 */
 function bestTime() {
+  const t = pickBestTime();
+  const { from, to } = night.chartRange;
+  return new Date(Math.min(to.getTime(), Math.max(from.getTime(), t.getTime())));
+}
+
+function pickBestTime() {
   const fallback = night.darkWindows.length ? midOf(longest(night.darkWindows)) : midOf({ start: night.chartRange.from, end: night.chartRange.to });
   switch (state.target) {
     case 'milkyway': return analysis.mw.best ? analysis.mw.best.t : fallback;
-    case 'moon': return analysis.moon.best?.t || analysis.moon.lowMoon?.t || fallback;
+    case 'moon': {
+      const low = analysis.moon.lowMoon;
+      // 삭 무렵에는 월출이 낮이라 그 시각을 추천하지 않는다
+      return analysis.moon.best?.t || (low && low.sunAlt < -4 ? low.t : fallback);
+    }
     case 'startrails': {
       const iv = longest(night.moonlessDark) || longest(night.darkWindows);
       return iv ? new Date(iv.start.getTime() + 15 * astro.MINUTE) : fallback;
@@ -266,7 +277,9 @@ function renderContext() {
   $('lon').value = state.lon.toFixed(4);
   $('date').value = state.date;
   const next = new Date(start.getTime() + astro.DAY);
-  $('dateHint').textContent = `${formatDate(start)} 저녁부터 ${formatDate(next)} 새벽까지 계산해요.`;
+  const far = astro.isFarTimeZone(state.lon);
+  $('dateHint').textContent = `${formatDate(start)} 저녁부터 ${formatDate(next)} 새벽까지 계산해요.`
+    + (far ? ' 이 위치는 기기와 시간대가 달라요. 모든 시각은 이 기기 시간 기준이에요.' : '');
   $('sensor').value = state.sensor;
   $('mp').value = state.mp;
   $('focal').value = l.focal;
@@ -613,8 +626,9 @@ function renderTimelinePanel() {
     legend.push(['var(--accent)', '복사점']);
   }
   if (t === 'startrails') {
-    series.push({ alt: (s) => s.polaris.alt, color: 'var(--accent)', width: 1.6, dash: '4 4' });
-    legend.push(['var(--accent)', '북극성']);
+    const southPole = southern();
+    series.push({ alt: (s) => (southPole ? Math.abs(state.lat) : s.polaris.alt), color: 'var(--accent)', width: 1.6, dash: '4 4' });
+    legend.push(['var(--accent)', southPole ? '천구 남극' : '북극성']);
   }
   if (t === 'planets' || t === 'city') {
     for (const p of PLANETS) {
@@ -792,7 +806,7 @@ function renderCalendar() {
   el.innerHTML = scan.rows.map((r) => {
     const v = fn(r);
     const pct = Math.max(0, Math.min(1, v / max));
-    const d = r.start;
+    const d = astro.nightStart(r.date); // 표시용: 이 기기 달력의 그 날짜
     const dow = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
     const peak = peaks.find((p) => astro.currentNightDateStr(p.peak) === r.date);
     const val = t === 'moon' || t === 'city' ? `${Math.round(v)}%` : v >= 60 ? `${(v / 60).toFixed(v >= 600 ? 0 : 1)}h` : v > 0 ? `${Math.round(v)}m` : '–';
@@ -893,6 +907,8 @@ function writeWeatherCache(w) {
 
 let weatherRequest = 0;
 async function ensureWeather({ force = false } = {}) {
+  // 새 요청이 시작되면 그 전에 보낸 요청의 응답은 버린다 (캐시로 끝나는 경우 포함)
+  const req = ++weatherRequest;
   const here = { lat: state.lat, lon: state.lon };
   const cached = weather.rows && isNearby(weather, here) ? weather : readWeatherCache();
   const usable = cached && isNearby(cached, here) ? cached : null;
@@ -907,7 +923,6 @@ async function ensureWeather({ force = false } = {}) {
     onWeatherChanged();
     return;
   }
-  const req = ++weatherRequest;
   weather.status = 'loading';
   renderWeatherStatus();
   try {
@@ -1033,10 +1048,14 @@ function bind() {
 
   $('gpsBtn').addEventListener('click', locate);
   const onCoord = () => {
-    const lat = Number($('lat').value);
-    const lon = Number($('lon').value);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
-      $('gpsStatus').textContent = '위도는 −90~90, 경도는 −180~180 사이 숫자로 입력하세요.';
+    const rawLat = $('lat').value.trim();
+    const rawLon = $('lon').value.trim();
+    const lat = Number(rawLat);
+    const lon = Number(rawLon);
+    if (rawLat === '' || rawLon === '' || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+      $('gpsStatus').textContent = '위도는 −90~90, 경도는 −180~180 사이 숫자로 입력하세요. 이전 위치를 그대로 써요.';
+      $('lat').value = state.lat.toFixed(4);
+      $('lon').value = state.lon.toFixed(4);
       return;
     }
     setLocation(lat, lon, 'manual', '');

@@ -19,10 +19,28 @@ export function makeObserver(lat, lon) {
   return new (lib().Observer)(lat, lon, 0);
 }
 
-/** 'YYYY-MM-DD'의 현지 정오 (그날 밤 계산의 시작점) */
-export function nightStart(dateStr) {
+/**
+ * 'YYYY-MM-DD' 밤 계산의 시작점(정오).
+ * lon을 주면 그 장소의 태양시 정오를 쓴다. 기기와 시간대가 먼 곳도 밤이 둘로 잘리지 않는다.
+ * lon이 없으면 이 기기 시각의 정오.
+ */
+export function nightStart(dateStr, lon) {
   const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d, 12, 0, 0, 0);
+  if (lon == null) return new Date(y, m - 1, d, 12, 0, 0, 0);
+  return new Date(Date.UTC(y, m - 1, d, 12) - (lon / 15) * HOUR);
+}
+
+/** 'YYYY-MM-DD'에서 n일 뒤 날짜 문자열 (시간대와 무관) */
+export function shiftDateStr(dateStr, n) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+/** 그 장소의 시간대가 이 기기와 2시간 넘게 다른가 (경도로 어림) */
+export function isFarTimeZone(lon, date = new Date()) {
+  const deviceOffsetH = -date.getTimezoneOffset() / 60;
+  const diff = Math.abs((((lon / 15 - deviceOffsetH) % 24) + 36) % 24 - 12);
+  return diff > 2;
 }
 
 export function toDateStr(date) {
@@ -188,7 +206,7 @@ export function twilightLevel(sunAlt) {
 export function computeNight({ lat, lon, date, stepMin = 5 }) {
   const a = lib();
   const obs = makeObserver(lat, lon);
-  const start = nightStart(date);
+  const start = nightStart(date, lon);
   const end = new Date(start.getTime() + DAY);
   const t0 = a.MakeTime(start);
   const within = (t) => (t && t.date >= start && t.date <= end ? t.date : null);
@@ -408,7 +426,7 @@ export function analyzeMeteor(night, shower) {
   let best = null;
   const radiant = night.samples.map((s) => {
     const pos = frameAt(s)(shower.ra, shower.dec);
-    if (s.sun.alt < night.darkThreshold && (!best || pos.alt > best.pos.alt)) best = { t: s.t, pos };
+    if (s.sun.alt < night.darkThreshold && pos.alt > 0 && (!best || pos.alt > best.pos.alt)) best = { t: s.t, pos };
     return { t: s.t, ...pos };
   });
   return { radiant, best };
@@ -473,9 +491,9 @@ export function scanNights({ lat, lon, fromDate, count = 30, stepMin = 20 }) {
   const a = lib();
   const obs = makeObserver(lat, lon);
   const out = [];
-  const base = nightStart(fromDate);
   for (let i = 0; i < count; i++) {
-    const start = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i, 12);
+    const dateStr = shiftDateStr(fromDate, i);
+    const start = nightStart(dateStr, lon);
     const moon = moonInfo(new Date(start.getTime() + 12 * HOUR));
     let dark = 0;
     let moonless = 0;
@@ -498,7 +516,7 @@ export function scanNights({ lat, lon, fromDate, count = 30, stepMin = 20 }) {
       const c = frame(cyg.ra, cyg.dec);
       if (gc.alt > 10 || c.alt > 30) band += step;
     }
-    out.push({ date: toDateStr(start), start, moon, dark, moonless, core, band });
+    out.push({ date: dateStr, start, moon, dark, moonless, core, band });
   }
   return out;
 }

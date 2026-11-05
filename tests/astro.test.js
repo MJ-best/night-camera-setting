@@ -122,3 +122,36 @@ test('태양 황경 검색: 극대일이 매년 같은 무렵에 온다', () => 
   const after = astro.nextSunLongitude(140, new Date(2026, 7, 14));
   assert.equal(after.getFullYear(), 2027);
 });
+
+test('기기와 시간대가 먼 장소도 밤이 둘로 잘리지 않는다 (서울 기기로 라팔마 계획)', () => {
+  const n = astro.computeNight({ lat: 28.7606, lon: -17.8814, date: '2026-11-05' });
+  const order = ['sunset', 'astroDusk', 'astroDawn', 'sunrise'];
+  for (const k of order) assert.ok(n.events[k], `${k} 없음`);
+  for (let i = 1; i < order.length; i++) assert.ok(n.events[order[i - 1]] < n.events[order[i]], `${order[i - 1]} < ${order[i]}`);
+  assert.equal(n.darkWindows.length, 1);
+  // 라팔마 11월 일몰은 현지(UTC+0) 18시 무렵
+  const sunsetUtcH = n.events.sunset.getUTCHours() + n.events.sunset.getUTCMinutes() / 60;
+  assert.ok(sunsetUtcH > 17.5 && sunsetUtcH < 19.5, `sunset ${n.events.sunset.toISOString()}`);
+});
+
+test('장소 정오·날짜 이동·시간대 판정', () => {
+  assert.equal(astro.nightStart('2026-11-05', 0).toISOString(), '2026-11-05T12:00:00.000Z');
+  assert.equal(astro.nightStart('2026-11-05', 135).toISOString(), '2026-11-05T03:00:00.000Z');
+  assert.equal(astro.shiftDateStr('2026-12-31', 1), '2027-01-01');
+  assert.equal(astro.shiftDateStr('2026-03-01', -1), '2026-02-28');
+  assert.equal(astro.isFarTimeZone(127), false); // 서울 기기(UTC+9)
+  assert.equal(astro.isFarTimeZone(-17.9), true);
+  assert.equal(astro.isFarTimeZone(-170), true);
+});
+
+test('30일 스캔 날짜는 장소와 무관하게 하루씩 늘어난다', () => {
+  const rows = astro.scanNights({ lat: 19.82, lon: -155.47, fromDate: '2026-12-30', count: 4 });
+  assert.deepEqual(rows.map((r) => r.date), ['2026-12-30', '2026-12-31', '2027-01-01', '2027-01-02']);
+});
+
+test('복사점이 밤새 지평선 아래면 유성우 최적 시각이 없다', () => {
+  const n = astro.computeNight({ lat: -33.87, lon: 151.21, date: '2026-01-01' });
+  const qua = astro.meteorShowerById('QUA', '2026-01-01');
+  const res = astro.analyzeMeteor(n, qua);
+  assert.equal(res.best, null);
+});
