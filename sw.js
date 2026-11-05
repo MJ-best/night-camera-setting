@@ -45,7 +45,12 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   // 날씨는 앱이 직접 기기에 저장하므로 서비스 워커는 손대지 않는다
   if (url.hostname === 'api.open-meteo.com') return;
-  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+  if (url.hostname === 'fonts.googleapis.com') {
+    // 글꼴 CSS는 응답 상태를 볼 수 없어서(opaque) 저장본을 쓰되 매번 새로 받아 바꿔 둔다
+    event.respondWith(staleWhileRevalidate(req, FONT_CACHE));
+    return;
+  }
+  if (url.hostname === 'fonts.gstatic.com') {
     event.respondWith(cacheFirst(req, FONT_CACHE));
     return;
   }
@@ -62,6 +67,18 @@ async function cacheFirst(req, cacheName) {
   const hit = await cache.match(req, { ignoreSearch: cacheName === APP_CACHE });
   if (hit) return hit;
   const res = await fetch(req);
-  if (res.ok || res.type === 'opaque') cache.put(req, res.clone());
+  if (res.ok) cache.put(req, res.clone());
   return res;
+}
+
+async function staleWhileRevalidate(req, cacheName) {
+  const cache = await caches.open(cacheName);
+  const hit = await cache.match(req);
+  const fresh = fetch(req)
+    .then((res) => {
+      if (res.ok || res.type === 'opaque') cache.put(req, res.clone());
+      return res;
+    })
+    .catch(() => hit || Response.error());
+  return hit || fresh;
 }

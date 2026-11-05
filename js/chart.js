@@ -74,7 +74,7 @@ export function renderTimeline(el, opts) {
       if (t < from - 18e5 || t > to) continue;
       const x1 = Math.max(padL, x(t));
       const x2 = Math.min(W - padR, x(t + 36e5));
-      if (x2 <= x1) continue;
+      if (x2 - x1 <= 1) continue; // 차트 끝에 걸린 1px 미만 조각은 그리지 않는다
       const hh = (c.cloud / 100) * cloudH;
       parts.push(`<rect x="${(x1 + 0.5).toFixed(1)}" y="${(top + cloudH - hh).toFixed(1)}" width="${(x2 - x1 - 1).toFixed(1)}" height="${hh.toFixed(1)}" fill="var(--cloud)"><title>${c.cloud}%</title></rect>`);
     }
