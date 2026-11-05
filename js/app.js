@@ -9,6 +9,7 @@ import { STARS, METEOR_SHOWERS, PLANETS } from './data.js';
 import {
   azimuthName, formatTime, formatDate, formatNightTime, formatRange, formatDuration, formatCoord,
   escapeHtml, moonPhasePath, signedDeg, normDeg,
+  setZone, zoned, zoneLabel, zoneOffsetMin, deviceTimeZone, isValidTimeZone, nightDateStrAt, formatDateStr, dateStrParts, weekdayName,
 } from './format.js';
 
 const $ = (id) => document.getElementById(id);
@@ -28,10 +29,11 @@ const DEFAULTS = {
   declination: null,
   skyMode: 'pano',
   screenMode: 'normal',
+  zone: null, // 촬영 장소의 시간대 { id: IANA 이름, source }
   places: [],
   lenses: Object.fromEntries(Object.entries(cam.TARGETS).map(([k, v]) => [k, { ...v.lens }])),
 };
-const PERSIST = ['target', 'lat', 'lon', 'locSource', 'placeName', 'sensor', 'mp', 'bortle', 'declination', 'skyMode', 'screenMode', 'places', 'lenses'];
+const PERSIST = ['target', 'lat', 'lon', 'locSource', 'placeName', 'sensor', 'mp', 'bortle', 'declination', 'skyMode', 'screenMode', 'places', 'lenses', 'zone'];
 
 function loadState() {
   try {
@@ -76,7 +78,37 @@ const lens = () => state.lenses[state.target] || cam.TARGETS[state.target].lens;
 const declination = () => (state.declination ?? defaultDeclination(state.lat, state.lon));
 const southern = () => state.lat < 0;
 
+/* 현지 시간대: 날씨 예보가 알려 준 시간대 > GPS(기기 시간대) > 가까운 곳이면 기기 시간대 > 경도로 추정 */
+const DEVICE_TZ = deviceTimeZone();
+let activeZone = null;
+
+function resolveZone() {
+  if (state.zone && isValidTimeZone(state.zone.id)) return state.zone;
+  if (!astro.isFarTimeZone(state.lon)) return { id: DEVICE_TZ, source: 'device' };
+  return { id: null, fixedMin: Math.round(state.lon / 15) * 60, source: 'estimate' };
+}
+
+/** @returns 시간대가 바뀌었으면 true */
+function applyZone() {
+  const z = resolveZone();
+  const changed = !activeZone || activeZone.id !== z.id || activeZone.fixedMin !== z.fixedMin;
+  activeZone = z;
+  setZone(z);
+  return changed;
+}
+
+function zoneDescription() {
+  const now = new Date();
+  const label = zoneLabel(now);
+  const diffH = (zoneOffsetMin(now) + now.getTimezoneOffset()) / 60;
+  const diff = Math.abs(diffH) >= 0.5 ? ` 이 기기보다 ${Math.abs(diffH)}시간 ${diffH > 0 ? '빨라요' : '늦어요'}.` : '';
+  if (activeZone.source === 'estimate') return `시각은 현지 시간(경도로 추정한 ${label})으로 보여 줘요. 날씨 예보를 받으면 정확한 시간대로 바뀌어요.${diff}`;
+  const name = activeZone.id && activeZone.id !== DEVICE_TZ ? ` · ${activeZone.id}` : '';
+  return `시각은 현지 시간(${label}${name})으로 보여 줘요.${diff}`;
+}
+
 function recompute() {
+  applyZone();
   night = astro.computeNight({ lat: state.lat, lon: state.lon, date: state.date });
   analysis = {
     mw: astro.analyzeMilkyWay(night),
@@ -269,17 +301,15 @@ function renderTimeDependent() {
 }
 
 function renderContext() {
-  const where = state.placeName || formatCoord(state.lat, state.lon);
-  const start = astro.nightStart(state.date);
-  $('contextLine').textContent = `${where} · ${formatDate(start, { weekday: false })} 밤 · ${cam.TARGETS[state.target].label}`;
+  const where = state.placeName || formatCoord(state.lat, state.lon, 2);
+  const now = new Date();
+  const localNote = Math.abs(zoneOffsetMin(now) + now.getTimezoneOffset()) >= 30 ? ` · 현지 ${zoneLabel(now)}` : '';
+  $('contextLine').textContent = `${where} · ${formatDateStr(state.date, { weekday: false })} 밤 · ${cam.TARGETS[state.target].label}${localNote}`;
   const l = lens();
   $('lat').value = state.lat.toFixed(4);
   $('lon').value = state.lon.toFixed(4);
   $('date').value = state.date;
-  const next = new Date(start.getTime() + astro.DAY);
-  const far = astro.isFarTimeZone(state.lon);
-  $('dateHint').textContent = `${formatDate(start)} 저녁부터 ${formatDate(next)} 새벽까지 계산해요.`
-    + (far ? ' 이 위치는 기기와 시간대가 달라요. 모든 시각은 이 기기 시간 기준이에요.' : '');
+  $('dateHint').textContent = `${formatDateStr(state.date)} 저녁부터 ${formatDateStr(astro.shiftDateStr(state.date, 1))} 새벽까지 계산해요. ${zoneDescription()}`;
   $('sensor').value = state.sensor;
   $('mp').value = state.mp;
   $('focal').value = l.focal;
@@ -296,8 +326,7 @@ function renderContext() {
 
 function renderSetupSummary() {
   const where = state.placeName || formatCoord(state.lat, state.lon);
-  const start = astro.nightStart(state.date);
-  $('setupSummary').textContent = `${where} · ${formatDate(start)} 밤 · ${cam.sensorOf(state.sensor).label} ${state.mp}MP · 광해 ${state.bortle}`;
+  $('setupSummary').textContent = `${where} · ${formatDateStr(state.date)} 밤 · ${cam.sensorOf(state.sensor).label} ${state.mp}MP · 광해 ${state.bortle}`;
 }
 
 function renderPlaces() {
@@ -722,7 +751,7 @@ function renderExtra() {
       <p class="hint">다가오는 유성우: ${up.map((u) => `${escapeHtml(u.name)} ${formatDate(u.peak, { weekday: false })}`).join(' · ')}</p>`;
     $('showerSel').addEventListener('change', (e) => { state.shower = e.target.value; recompute(); });
     $('goPeak').addEventListener('click', () => {
-      state.date = astro.currentNightDateStr(new Date(sh.peak.getTime()));
+      state.date = nightDateStrAt(sh.peak);
       recompute();
     });
     return;
@@ -772,7 +801,7 @@ function renderExtra() {
 
 /* 30일 달력 */
 function scheduleScan() {
-  const fromDate = astro.currentNightDateStr();
+  const fromDate = nightDateStrAt(new Date());
   const key = `${state.lat.toFixed(2)},${state.lon.toFixed(2)},${fromDate}`;
   if (scan.key === key && scan.rows) { renderCalendar(); return; }
   scan = { key, rows: null };
@@ -806,13 +835,13 @@ function renderCalendar() {
   el.innerHTML = scan.rows.map((r) => {
     const v = fn(r);
     const pct = Math.max(0, Math.min(1, v / max));
-    const d = astro.nightStart(r.date); // 표시용: 이 기기 달력의 그 날짜
-    const dow = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
-    const peak = peaks.find((p) => astro.currentNightDateStr(p.peak) === r.date);
+    const d = dateStrParts(r.date);
+    const dow = weekdayName(d.dow);
+    const peak = peaks.find((p) => nightDateStrAt(p.peak) === r.date);
     const val = t === 'moon' || t === 'city' ? `${Math.round(v)}%` : v >= 60 ? `${(v / 60).toFixed(v >= 600 ? 0 : 1)}h` : v > 0 ? `${Math.round(v)}m` : '–';
-    return `<button type="button" class="cal-day" data-date="${r.date}" aria-pressed="${r.date === state.date}" title="${formatDate(d)} 밤">
-      <span class="dow ${d.getDay() === 0 ? 'sun' : d.getDay() === 6 ? 'sat' : ''}">${dow}</span>
-      <span class="dnum">${d.getDate() === 1 || r === scan.rows[0] ? `${d.getMonth() + 1}/` : ''}${d.getDate()}</span>
+    return `<button type="button" class="cal-day" data-date="${r.date}" aria-pressed="${r.date === state.date}" title="${formatDateStr(r.date)} 밤">
+      <span class="dow ${d.dow === 0 ? 'sun' : d.dow === 6 ? 'sat' : ''}">${dow}</span>
+      <span class="dnum">${d.d === 1 || r === scan.rows[0] ? `${d.m}/` : ''}${d.d}</span>
       <svg viewBox="-10 -10 20 20" aria-hidden="true"><circle r="9" fill="#1a2133"/><path d="${moonPhasePath(r.moon.phase, 9, southern())}" fill="var(--moon)"/></svg>
       <span class="cal-bar"><i style="height:${(pct * 100).toFixed(0)}%; ${t === 'moon' || t === 'city' ? 'background:var(--moon)' : ''}"></i></span>
       <span class="val">${val}</span>
@@ -876,8 +905,9 @@ function syncSlider() {
   const sl = $('timeSlider');
   sl.value = String(Math.round((state.selected - night.chartRange.from) / astro.MINUTE));
   $('timeOut').textContent = formatTime(state.selected);
-  const nextDay = state.selected.getDate() !== night.start.getDate();
-  $('timeDay').textContent = nextDay ? `${state.selected.getMonth() + 1}/${state.selected.getDate()} 새벽` : `${state.selected.getMonth() + 1}/${state.selected.getDate()} 저녁`;
+  const z = zoned(state.selected);
+  const nextDay = z.getUTCDate() !== zoned(night.start).getUTCDate();
+  $('timeDay').textContent = `${z.getUTCMonth() + 1}/${z.getUTCDate()} ${nextDay ? '새벽' : '저녁'}`;
 }
 
 let raf = 0;
@@ -893,7 +923,7 @@ function readWeatherCache() {
   try {
     const c = JSON.parse(localStorage.getItem(WEATHER_KEY));
     const rows = c && unpackRows(c.data);
-    return rows && rows.length ? { lat: c.lat, lon: c.lon, at: c.at, rows } : null;
+    return rows && rows.length ? { lat: c.lat, lon: c.lon, at: c.at, rows, tz: c.tz || null } : null;
   } catch {
     return null;
   }
@@ -901,7 +931,7 @@ function readWeatherCache() {
 
 function writeWeatherCache(w) {
   try {
-    localStorage.setItem(WEATHER_KEY, JSON.stringify({ lat: w.lat, lon: w.lon, at: w.at, data: packRows(w.rows) }));
+    localStorage.setItem(WEATHER_KEY, JSON.stringify({ lat: w.lat, lon: w.lon, at: w.at, tz: w.tz || null, data: packRows(w.rows) }));
   } catch { /* 저장 공간이 없으면 이번 세션만 쓴다 */ }
 }
 
@@ -926,9 +956,9 @@ async function ensureWeather({ force = false } = {}) {
   weather.status = 'loading';
   renderWeatherStatus();
   try {
-    const rows = await fetchWeather(here.lat, here.lon);
+    const { rows, tz } = await fetchWeather(here.lat, here.lon);
     if (req !== weatherRequest) return;
-    weather = { ...here, at: Date.now(), rows, status: 'ok', error: null };
+    weather = { ...here, at: Date.now(), rows, tz, status: 'ok', error: null };
     writeWeatherCache(weather);
   } catch (err) {
     if (req !== weatherRequest) return;
@@ -937,7 +967,22 @@ async function ensureWeather({ force = false } = {}) {
   onWeatherChanged();
 }
 
+/** 예보가 알려 준 시간대를 이 장소의 시간대로 쓴다. 바뀌면 true */
+function adoptWeatherZone() {
+  if (!weather.tz || !isValidTimeZone(weather.tz) || !isNearby(weather, state)) return false;
+  if (state.zone?.id === weather.tz) return false;
+  state.zone = { id: weather.tz, source: 'forecast' };
+  const place = state.places.find((p) => isNearby(p, state));
+  if (place) place.zone = state.zone;
+  saveState();
+  return applyZone();
+}
+
 function onWeatherChanged() {
+  if (adoptWeatherZone() && night) {
+    renderAll();
+    return;
+  }
   renderWeatherStatus();
   if (!night) return;
   renderVerdict();
@@ -957,7 +1002,7 @@ function renderWeatherStatus() {
   const el = $('wxStatus');
   const btn = $('wxRefresh');
   btn.disabled = weather.status === 'loading';
-  const got = weather.at ? `${formatTime(new Date(weather.at))}에 받은 예보 (${ago(weather.at)})` : '';
+  const got = weather.at ? `예보 받음 (${ago(weather.at)})` : '';
   const wx = nightWeather();
   const tonight = wx ? ` · 이 날 밤 구름 <b>${Math.round(wx.cloud)}%</b> ${escapeHtml(wx.sky)}` : weather.rows ? ' · 고른 날짜는 예보 범위(16일) 밖이에요' : '';
   const msg = {
@@ -1034,7 +1079,7 @@ function bind() {
   $('bestTime').addEventListener('click', () => { state.selected = bestTime(); state.userTime = false; renderTimeDependent(); });
   $('nowTime').addEventListener('click', () => {
     const now = new Date();
-    const nd = astro.currentNightDateStr(now);
+    const nd = nightDateStrAt(now);
     if (nd !== state.date) { state.date = nd; recompute(); }
     if (now >= night.chartRange.from && now <= night.chartRange.to) setSelected(now);
   });
@@ -1064,11 +1109,11 @@ function bind() {
   $('lon').addEventListener('change', onCoord);
   $('places').addEventListener('change', (e) => {
     const p = state.places[Number(e.target.value)];
-    if (p) setLocation(p.lat, p.lon, 'place', p.name);
+    if (p) setLocation(p.lat, p.lon, 'place', p.name, p.zone && isValidTimeZone(p.zone.id) ? { id: p.zone.id, source: 'place' } : null);
   });
   $('savePlace').addEventListener('click', () => {
     const name = $('placeName').value.trim() || formatCoord(state.lat, state.lon);
-    state.places = [{ name, lat: state.lat, lon: state.lon }, ...state.places.filter((p) => p.name !== name)].slice(0, 12);
+    state.places = [{ name, lat: state.lat, lon: state.lon, zone: state.zone }, ...state.places.filter((p) => p.name !== name)].slice(0, 12);
     state.placeName = name;
     $('placeName').value = '';
     saveState();
@@ -1187,11 +1232,12 @@ function applyNightVision() {
   btn.querySelector('span').textContent = mode.label;
 }
 
-function setLocation(lat, lon, source, name) {
+function setLocation(lat, lon, source, name, zone = null) {
   state.lat = Math.round(lat * 10000) / 10000;
   state.lon = Math.round(lon * 10000) / 10000;
   state.locSource = source;
   state.placeName = name;
+  state.zone = zone;
   saveState();
   recompute();
   ensureWeather();
@@ -1210,7 +1256,8 @@ function locate() {
     btn.disabled = false;
     const { latitude, longitude, accuracy } = pos.coords;
     status.textContent = `현재 위치를 찾았어요 (정확도 약 ${Math.round(accuracy)}m).`;
-    setLocation(latitude, longitude, 'gps', '현재 위치');
+    // 지금 그 자리에 있으니 기기 시간대가 곧 현지 시간대
+    setLocation(latitude, longitude, 'gps', '현재 위치', DEVICE_TZ ? { id: DEVICE_TZ, source: 'gps' } : null);
   }, (err) => {
     btn.disabled = false;
     const msg = {
@@ -1231,6 +1278,8 @@ function init() {
   skyMap.mode = state.skyMode;
   applyNightVision();
   setPage(PAGE.setup);
+  applyZone();
+  state.date = nightDateStrAt(new Date());
   recompute();
   // 예시 위치(서울)로는 예보를 받지 않는다. 위치를 정하면 그때 받는다
   if (state.locSource !== 'default') ensureWeather();
