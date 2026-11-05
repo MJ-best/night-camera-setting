@@ -341,13 +341,25 @@ export function bandAngleAt(frame, l) {
 }
 
 /** 유성우: 날짜 기준으로 활동 중이거나 다음에 올 유성우 */
-export function findMeteorShower(dateStr) {
+/**
+ * fromDate 이후 태양이 처음으로 황경 lon°에 오는 시각.
+ * SearchSunLongitude에 1년짜리 창을 주면 목표가 창 끝 근처일 때 null을 돌려주므로,
+ * 지금 태양 황경으로 날짜를 어림한 뒤 며칠짜리 좁은 창에서 찾는다.
+ */
+export function nextSunLongitude(lon, fromDate) {
   const a = lib();
+  const now = a.SunPosition(a.MakeTime(fromDate)).elon;
+  const days = ((((lon - now) % 360) + 360) % 360) / 360 * 365.2422;
+  const start = new Date(fromDate.getTime() + Math.max(0, days - 4) * DAY);
+  const hit = a.SearchSunLongitude(lon, a.MakeTime(start), 8);
+  return hit ? hit.date : new Date(fromDate.getTime() + days * DAY);
+}
+
+export function findMeteorShower(dateStr) {
   const ref = nightStart(dateStr);
-  const from = a.MakeTime(new Date(ref.getTime() - 40 * DAY));
+  const from = new Date(ref.getTime() - 40 * DAY);
   const list = METEOR_SHOWERS.map((sh) => {
-    const peakT = a.SearchSunLongitude(sh.peakSolarLon, from, 366);
-    const peak = peakT.date;
+    const peak = nextSunLongitude(sh.peakSolarLon, from);
     const days = (peak - ref) / DAY;
     return { ...sh, peak, daysToPeak: days, active: isActive(sh, ref) };
   });
@@ -360,12 +372,10 @@ export function findMeteorShower(dateStr) {
 
 /** id로 유성우를 고르고, 날짜에 가장 가까운 극대 시각을 붙인다 */
 export function meteorShowerById(id, dateStr) {
-  const a = lib();
   const sh = METEOR_SHOWERS.find((s) => s.id === id);
   if (!sh) return findMeteorShower(dateStr);
   const ref = nightStart(dateStr);
-  const from = a.MakeTime(new Date(ref.getTime() - 182 * DAY));
-  const peak = a.SearchSunLongitude(sh.peakSolarLon, from, 366).date;
+  const peak = nextSunLongitude(sh.peakSolarLon, new Date(ref.getTime() - 182 * DAY));
   return { ...sh, peak, daysToPeak: (peak - ref) / DAY, active: isActive(sh, ref) };
 }
 
@@ -377,9 +387,8 @@ function isActive(sh, date) {
 }
 
 export function upcomingShowers(date, count = 4) {
-  const a = lib();
-  const from = a.MakeTime(new Date(date.getTime() - 2 * DAY));
-  return METEOR_SHOWERS.map((sh) => ({ ...sh, peak: a.SearchSunLongitude(sh.peakSolarLon, from, 366).date }))
+  const from = new Date(date.getTime() - 2 * DAY);
+  return METEOR_SHOWERS.map((sh) => ({ ...sh, peak: nextSunLongitude(sh.peakSolarLon, from) }))
     .sort((x, y) => x.peak - y.peak)
     .slice(0, count);
 }
