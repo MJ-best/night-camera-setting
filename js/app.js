@@ -228,6 +228,8 @@ function renderAll() {
   renderContext();
   renderVerdict();
   renderTargets();
+  renderWeatherStatus();
+  renderWeatherInfo();
   renderTimeDependent();
   renderExtra();
   renderCalendar();

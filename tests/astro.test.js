@@ -95,3 +95,30 @@ test('정오 이전이면 어젯밤 날짜를 쓴다', () => {
   assert.equal(astro.currentNightDateStr(new Date(2026, 9, 31, 2, 0)), '2026-10-30');
   assert.equal(astro.currentNightDateStr(new Date(2026, 9, 31, 21, 0)), '2026-10-31');
 });
+
+test('유성우 극대 검색은 2년 동안 어느 날짜에서도 실패하지 않는다', () => {
+  for (let d = new Date(2026, 0, 1); d < new Date(2028, 0, 1); d.setDate(d.getDate() + 1)) {
+    const ds = astro.toDateStr(d);
+    const sh = astro.findMeteorShower(ds);
+    assert.ok(sh && sh.peak instanceof Date, ds);
+    assert.ok(sh.daysToPeak > -41 && sh.daysToPeak < 366, `${ds} ${sh.id} ${sh.daysToPeak}`);
+    const up = astro.upcomingShowers(new Date(d), 3);
+    assert.equal(up.length, 3);
+    assert.ok(up.every((u) => u.peak >= new Date(d.getTime() - 3 * astro.DAY)), ds);
+  }
+});
+
+test('태양 황경 검색: 극대일이 매년 같은 무렵에 온다', () => {
+  // 페르세우스(140°)는 8월 12~13일, 쌍둥이자리(262.2°)는 12월 13~15일
+  for (const year of [2026, 2027, 2028]) {
+    const per = astro.nextSunLongitude(140, new Date(year, 0, 1));
+    assert.equal(per.getMonth(), 7);
+    assert.ok(per.getDate() >= 12 && per.getDate() <= 13, `${year} PER ${per}`);
+    const gem = astro.nextSunLongitude(262.2, new Date(year, 0, 1));
+    assert.equal(gem.getMonth(), 11);
+    assert.ok(gem.getDate() >= 13 && gem.getDate() <= 15, `${year} GEM ${gem}`);
+  }
+  // 목표 황경을 막 지난 시점이면 다음 해를 돌려준다
+  const after = astro.nextSunLongitude(140, new Date(2026, 7, 14));
+  assert.equal(after.getFullYear(), 2027);
+});
