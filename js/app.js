@@ -11,6 +11,9 @@ import {
   escapeHtml, moonPhasePath, signedDeg, normDeg,
   setZone, zoned, zoneLabel, zoneOffsetMin, deviceTimeZone, isValidTimeZone, nightDateStrAt, formatDateStr, dateStrParts, weekdayName,
 } from './format.js';
+import {
+  isNativeApp, getCurrentLocation, hideSplashScreen, syncStatusBar, hapticTap, openExternalUrl, registerBackHandler,
+} from './native.js';
 
 const $ = (id) => document.getElementById(id);
 const STORE_KEY = 'night-camera-setting:v1';
@@ -519,7 +522,10 @@ function renderVerdict() {
   const lines = [...v.lines];
   if (wx && wx.cloud >= 45 && state.target !== 'city') lines.unshift(`예보상 구름이 많아요 (평균 ${Math.round(wx.cloud)}%). 가장 맑은 때는 ${formatTime(wx.clearest.t)} 무렵 ${Math.round(wx.clearest.cloud)}%예요.`);
   $('verdict').innerHTML = `
-    <div class="verdict-top"><h2>${escapeHtml(v.title)}</h2><span class="pill ${level}">${label}</span></div>
+    <div class="verdict-head">
+      <div class="verdict-top"><h2>${escapeHtml(v.title)}</h2><span class="pill ${level}">${label}</span></div>
+      <img class="verdict-thumb" src="assets/targets/${escapeHtml(state.target)}.webp" alt="" width="68" height="46" decoding="async">
+    </div>
     <div class="verdict-lines">${lines.map((l) => `<p>${escapeHtml(l)}</p>`).join('')}</div>
     <div class="chips">${chips.join('')}</div>`;
   analysis.windows = v.windows || [];
@@ -1070,6 +1076,7 @@ function bind() {
     state.selected = bestTime();
     state.userTime = false;
     skyMap.userPanned = false;
+    hapticTap('LIGHT');
     renderAll();
   }));
 
@@ -1157,6 +1164,7 @@ function bind() {
   $('nightVision').addEventListener('click', () => {
     state.screenMode = SCREEN_MODES[state.screenMode]?.next || 'red';
     applyNightVision();
+    hapticTap('LIGHT');
     saveState();
   });
 
@@ -1164,7 +1172,7 @@ function bind() {
   if (!compassSupported()) cbtn.hidden = true;
   cbtn.addEventListener('click', async () => {
     if (compass.active) {
-      compass.stop();
+      await compass.stop();
       heading = null;
       cbtn.setAttribute('aria-pressed', 'false');
       cbtn.textContent = '실시간 나침반';
@@ -1173,6 +1181,7 @@ function bind() {
     }
     try {
       await compass.start();
+      hapticTap('MEDIUM');
       cbtn.setAttribute('aria-pressed', 'true');
       cbtn.textContent = '나침반 끄기';
       $('dirLive').hidden = false;
@@ -1192,7 +1201,16 @@ function bind() {
       if (i !== currentPage) setPage(i);
     });
   }, { passive: true });
-  document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => goToPage(Number(b.dataset.goto))));
+  document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => {
+    hapticTap('LIGHT');
+    goToPage(Number(b.dataset.goto));
+  }));
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest && e.target.closest('a[data-external="true"]');
+    if (!link || !isNativeApp()) return;
+    e.preventDefault();
+    openExternalUrl(link.href);
+  });
   document.addEventListener('keydown', (e) => {
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (e.target.closest && e.target.closest('input, select, textarea, [contenteditable]')) return;
@@ -1230,6 +1248,7 @@ function applyNightVision() {
   btn.setAttribute('aria-pressed', String(state.screenMode !== 'normal'));
   btn.title = mode.title;
   btn.querySelector('span').textContent = mode.label;
+  syncStatusBar(state.screenMode);
 }
 
 function setLocation(lat, lon, source, name, zone = null) {
@@ -1243,35 +1262,29 @@ function setLocation(lat, lon, source, name, zone = null) {
   ensureWeather();
 }
 
-function locate() {
+async function locate() {
   const status = $('gpsStatus');
-  if (!('geolocation' in navigator)) {
-    status.textContent = '이 브라우저는 위치 기능을 지원하지 않아요. 좌표를 직접 입력하세요.';
-    return;
-  }
   const btn = $('gpsBtn');
   btn.disabled = true;
   status.textContent = '위치를 찾는 중… (야외에서 더 정확해요)';
-  navigator.geolocation.getCurrentPosition((pos) => {
-    btn.disabled = false;
-    const { latitude, longitude, accuracy } = pos.coords;
-    status.textContent = `현재 위치를 찾았어요 (정확도 약 ${Math.round(accuracy)}m).`;
+  try {
+    const { latitude, longitude, accuracy } = await getCurrentLocation();
+    const accText = Number.isFinite(accuracy) ? ` (정확도 약 ${Math.round(accuracy)}m)` : '';
+    status.textContent = `현재 위치를 찾았어요${accText}.`;
+    hapticTap('MEDIUM');
     // 지금 그 자리에 있으니 기기 시간대가 곧 현지 시간대
     setLocation(latitude, longitude, 'gps', '현재 위치', DEVICE_TZ ? { id: DEVICE_TZ, source: 'gps' } : null);
-  }, (err) => {
+  } catch (err) {
+    status.textContent = err?.message || '위치를 가져오지 못했어요.';
+  } finally {
     btn.disabled = false;
-    const msg = {
-      1: '위치 권한이 거부됐어요. 브라우저 설정에서 이 사이트의 위치 접근을 허용하거나 좌표를 직접 입력하세요.',
-      2: '위치를 확인할 수 없어요. 하늘이 트인 곳에서 다시 시도하거나 좌표를 직접 입력하세요.',
-      3: '위치 확인 시간이 초과됐어요. 다시 시도해 주세요.',
-    }[err.code] || '위치를 가져오지 못했어요.';
-    status.textContent = msg;
-  }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 5 * 60 * 1000 });
+  }
 }
 
 function init() {
   if (!globalThis.Astronomy) {
     $('verdict').innerHTML = '<p>천문 계산 라이브러리를 불러오지 못했어요. 새로고침해 주세요.</p>';
+    hideSplashScreen();
     return;
   }
   bind();
@@ -1284,7 +1297,15 @@ function init() {
   // 예시 위치(서울)로는 예보를 받지 않는다. 위치를 정하면 그때 받는다
   if (state.locSource !== 'default') ensureWeather();
   else renderWeatherStatus();
-  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  registerBackHandler(() => {
+    if (currentPage > 0) {
+      goToPage(currentPage - 1);
+      return true;
+    }
+    return false;
+  });
+  hideSplashScreen();
+  if (!isNativeApp() && 'serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 }

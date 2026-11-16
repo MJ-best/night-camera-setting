@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>개인정보 처리방침 · 밤하늘 촬영 (NightSky Shot)</title>
+<meta name="theme-color" content="#070a12">
+<link rel="icon" href="icons/favicon.png" type="image/png">
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0;
+    padding: max(24px, env(safe-area-inset-top, 0px)) 20px max(40px, env(safe-area-inset-bottom, 0px));
+    background: #070a12;
+    color: #e3e8f2;
+    font: 15px/1.65 system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.45rem; margin-bottom: 6px; }
+  h2 { font-size: 1.08rem; margin-top: 24px; color: #f0b35c; }
+  p, li { color: #c7d0e2; }
+  .muted { color: #8d98b0; font-size: 0.88rem; }
+  .card {
+    background: #0d1220;
+    border: 1px solid #222c44;
+    border-radius: 14px;
+    padding: 18px;
+    margin-top: 16px;
+  }
+  a { color: #f0b35c; }
+</style>
+</head>
+<body>
+<main>
+  <h1>개인정보 처리방침 (Privacy Policy)</h1>
+  <p class="muted">밤하늘 촬영 (NightSky Shot) · 최종 수정일: 2026년 11월 16일</p>
+
+  <div class="card">
+    <p><strong>요약:</strong> 「밤하늘 촬영 (NightSky Shot)」은 회원가입, 로그인, 광고 추적 SDK, 외부 분석 도구를 사용하지 않으며, 사용자의 개인정보를 별도 서버에 수집하거나 저장하지 않습니다.</p>
+  </div>
+
+  <h2>1. 처리하는 정보 및 이용 목적</h2>
+  <ul>
+    <li><strong>위치 정보 (GPS 위도·경도):</strong> 사용자가 ‘현재 위치 가져오기’를 눌렀을 때 촬영지의 태양·달·은하수·행성 고도와 방위를 계산하고, 해당 지점의 기상 예보를 불러오는 목적에만 사용됩니다. 위치 좌표는 기기 외부의 개발자 서버로 전송·저장되지 않습니다.</li>
+    <li><strong>동작 및 방향 센서 (나침반):</strong> ‘실시간 나침반’ 기능을 켠 동안 기기가 향하는 방위를 화면에 표시하기 위해 기기 내부에서만 실시간 처리됩니다.</li>
+    <li><strong>사용자 입력 설정 (카메라·장소 목록·예보 캐시):</strong> 선택한 센서 크기, 화소, 렌즈 초점거리, 저장한 촬영 장소, 최근 날씨 예보(3시간 캐시)는 기기 내부 저장소(<code>localStorage</code>)에만 보관됩니다.</li>
+  </ul>
+
+  <h2>2. 제3자 제공 및 외부 API 연동</h2>
+  <ul>
+    <li><strong>Open-Meteo API:</strong> 사용자가 위치를 지정해 날씨 예보를 조회할 때, 해당 위치의 위도·경도 좌표(소수점 셋째 자리 반올림)만 <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> 서버로 일회성 요청합니다. 개인 식별 정보나 기기 식별자는 전송되지 않습니다.</li>
+    <li>그 외 어떠한 광고 네트워크, 분석 도구, 제3자 데이터 브로커와도 데이터를 공유하지 않습니다.</li>
+  </ul>
+
+  <h2>3. 정보 보관 기간 및 삭제 방법</h2>
+  <p>모든 설정 및 저장된 장소 데이터는 사용자의 기기 내부에만 저장되므로, 앱을 삭제하거나 기기 설정에서 앱 저장 데이터를 지우면 즉시 영구 삭제됩니다.</p>
+
+  <h2>4. 권한 안내 (iOS · Android)</h2>
+  <ul>
+    <li><strong>위치 권한 (사용 중 허용):</strong> 현재 촬영지 좌표를 자동으로 입력할 때만 요청하며, 거부 시에도 위도·경도를 직접 입력해 모든 천문 계산 기능을 사용할 수 있습니다.</li>
+    <li><strong>동작 및 방향 권한 (iOS):</strong> 실시간 나침반 안내 기능을 사용할 때만 요청합니다.</li>
+  </ul>
+
+  <h2>5. 문의</h2>
+  <p>개인정보 처리방침 및 앱 관련 문의는 GitHub 저장소(<a href="https://github.com/MJ-best/night-camera-setting" target="_blank" rel="noopener">MJ-best/night-camera-setting</a>) 이슈를 통해 연락하실 수 있습니다.</p>
+
+  <hr style="border:0;border-top:1px solid #222c44;margin:32px 0 20px;">
+  <h2 lang="en">Privacy Policy Summary (English)</h2>
+  <p lang="en"><strong>NightSky Shot (밤하늘 촬영)</strong> does not require accounts, tracking SDKs, ads, or analytics. When you tap “Use Current Location”, GPS coordinates are used strictly on-device for astronomical calculations and sent as rounded coordinates to <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> only to fetch weather forecasts. Orientation/compass data stays entirely on-device. Preferences, saved locations, and cached forecasts are stored locally on your device and deleted when you uninstall the app.</p>
+
+  <p style="margin-top: 28px;"><a href="index.html">← 앱으로 돌아가기</a></p>
+</main>
+</body>
+</html>

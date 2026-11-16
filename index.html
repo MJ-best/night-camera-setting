@@ -7,13 +7,17 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="은하수·달·별궤적·유성우·행성·도시 야경 촬영에 맞는 카메라 설정과 GPS 기반 촬영 방향, 오늘 밤 하늘을 한 화면에서 확인하세요.">
 <meta name="theme-color" content="#070a12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="밤하늘 촬영">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="css/style.css">
+<script src="vendor/capacitor.js"></script>
 <script src="vendor/astronomy.browser.min.js"></script>
 <script type="module" src="js/app.js"></script>
 </head>
@@ -24,11 +28,7 @@
   <header class="topbar">
     <div class="wrap topbar-inner">
       <div class="brand">
-        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-          <circle cx="16" cy="16" r="11.5" fill="none" stroke="currentColor" stroke-width="1.4"/>
-          <path d="M16 1.5v7M16 23.5v7M1.5 16h7M23.5 16h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-          <path d="M16 11.2l1.3 3.5 3.5 1.3-3.5 1.3-1.3 3.5-1.3-3.5-3.5-1.3 3.5-1.3z" fill="currentColor"/>
-        </svg>
+        <img class="brand-mark" src="icons/brand-mark.png" alt="밤하늘 촬영 아이콘" width="34" height="34">
         <div class="brand-text">
           <h1>밤하늘 촬영 플래너</h1>
           <p class="context" id="contextLine">위치와 날짜를 불러오는 중…</p>
@@ -46,10 +46,13 @@
     <!-- 1. 준비: 위치·날짜·카메라를 한 카드에서. 네트워크(GPS·날씨)는 이 페이지에서만 쓴다 -->
     <section class="page" id="page-setup" aria-label="준비">
       <div class="wrap page-inner narrow">
-        <div class="page-head">
-          <p class="eyebrow">1 / 6 · 준비</p>
-          <h2>어디서, 언제, 어떤 카메라로 찍나요?</h2>
-          <p class="hint">위치를 정하면 그곳의 하늘과 날씨를 한 번만 받아 와요. 다음 페이지부터는 인터넷 없이 계산해요.</p>
+        <div class="page-head setup-hero">
+          <div class="setup-hero-text">
+            <p class="eyebrow">1 / 6 · 준비</p>
+            <h2>어디서, 언제, 어떤 카메라로 찍나요?</h2>
+            <p class="hint">위치를 정하면 그곳의 하늘과 날씨를 한 번만 받아 와요. 다음 페이지부터는 인터넷 없이 계산해요.</p>
+          </div>
+          <img class="setup-mascot" src="icons/icon-192.png" alt="" width="64" height="64" decoding="async">
         </div>
 
         <section class="panel setup-card" aria-label="촬영 준비">
@@ -128,12 +131,54 @@
         </div>
 
         <div class="target-grid" role="group" aria-label="촬영 상황">
-          <button type="button" class="target-card" data-target="milkyway" aria-pressed="false"><span class="tc-name">은하수</span><span class="tc-desc">광각으로 은하수와 풍경</span><span class="tc-status"></span></button>
-          <button type="button" class="target-card" data-target="moon" aria-pressed="false"><span class="tc-name">달</span><span class="tc-desc">망원으로 달 표면, 광각으로 달 풍경</span><span class="tc-status"></span></button>
-          <button type="button" class="target-card" data-target="startrails" aria-pressed="false"><span class="tc-name">별궤적</span><span class="tc-desc">인터벌 촬영으로 별의 원과 호</span><span class="tc-status"></span></button>
-          <button type="button" class="target-card" data-target="meteor" aria-pressed="false"><span class="tc-name">유성우</span><span class="tc-desc">복사점 쪽 하늘을 연속 촬영</span><span class="tc-status"></span></button>
-          <button type="button" class="target-card" data-target="planets" aria-pressed="false"><span class="tc-name">행성</span><span class="tc-desc">목성·토성 등 밝은 행성</span><span class="tc-status"></span></button>
-          <button type="button" class="target-card" data-target="city" aria-pressed="false"><span class="tc-name">도시 야경</span><span class="tc-desc">블루아워와 야경</span><span class="tc-status"></span></button>
+          <button type="button" class="target-card" data-target="milkyway" aria-pressed="false">
+            <div class="tc-art"><img src="assets/targets/milkyway.webp" alt="" decoding="async"></div>
+            <div class="tc-body">
+              <span class="tc-name">은하수</span>
+              <span class="tc-desc">광각으로 은하수와 풍경</span>
+              <span class="tc-status"></span>
+            </div>
+          </button>
+          <button type="button" class="target-card" data-target="moon" aria-pressed="false">
+            <div class="tc-art"><img src="assets/targets/moon.webp" alt="" decoding="async"></div>
+            <div class="tc-body">
+              <span class="tc-name">달</span>
+              <span class="tc-desc">망원으로 달 표면, 광각으로 달 풍경</span>
+              <span class="tc-status"></span>
+            </div>
+          </button>
+          <button type="button" class="target-card" data-target="startrails" aria-pressed="false">
+            <div class="tc-art"><img src="assets/targets/startrails.webp" alt="" decoding="async"></div>
+            <div class="tc-body">
+              <span class="tc-name">별궤적</span>
+              <span class="tc-desc">인터벌 촬영으로 별의 원과 호</span>
+              <span class="tc-status"></span>
+            </div>
+          </button>
+          <button type="button" class="target-card" data-target="meteor" aria-pressed="false">
+            <div class="tc-art"><img src="assets/targets/meteor.webp" alt="" decoding="async"></div>
+            <div class="tc-body">
+              <span class="tc-name">유성우</span>
+              <span class="tc-desc">복사점 쪽 하늘을 연속 촬영</span>
+              <span class="tc-status"></span>
+            </div>
+          </button>
+          <button type="button" class="target-card" data-target="planets" aria-pressed="false">
+            <div class="tc-art"><img src="assets/targets/planets.webp" alt="" decoding="async"></div>
+            <div class="tc-body">
+              <span class="tc-name">행성</span>
+              <span class="tc-desc">목성·토성 등 밝은 행성</span>
+              <span class="tc-status"></span>
+            </div>
+          </button>
+          <button type="button" class="target-card" data-target="city" aria-pressed="false">
+            <div class="tc-art"><img src="assets/targets/city.webp" alt="" decoding="async"></div>
+            <div class="tc-body">
+              <span class="tc-name">도시 야경</span>
+              <span class="tc-desc">블루아워와 야경</span>
+              <span class="tc-status"></span>
+            </div>
+          </button>
         </div>
 
         <section class="panel lens-card" aria-labelledby="lensTitle">
@@ -252,9 +297,24 @@
           </div>
         </section>
 
+        <section class="panel app-info" aria-labelledby="appInfoTitle">
+          <div class="app-info-head">
+            <img class="brand-mark" src="icons/brand-mark.png" alt="" width="36" height="36" decoding="async">
+            <div>
+              <h2 id="appInfoTitle">앱 정보 및 개인정보 안내</h2>
+              <p class="hint">밤하늘 촬영 (NightSky Shot) · v1.0.0</p>
+            </div>
+          </div>
+          <p class="hint">위치 좌표와 나침반 센서 값은 촬영지 천문 계산과 날씨 예보 조회에만 사용되며 외부 서버에 저장·수집되지 않습니다. 카메라·장소 설정은 기기 내부에만 보관됩니다.</p>
+          <p class="hint app-info-links">
+            <a href="privacy.html">개인정보 처리방침 전문</a> ·
+            <a href="https://github.com/cosinekitty/astronomy" target="_blank" rel="noopener" data-external="true">Astronomy Engine (MIT)</a> ·
+            <a href="https://open-meteo.com" target="_blank" rel="noopener" data-external="true">Open-Meteo (CC BY 4.0)</a>
+          </p>
+        </section>
+
         <footer class="footer">
-          <p>노출값은 출발점이에요. 테스트 컷을 찍고 히스토그램을 보며 조정하세요. 시각은 이 기기의 시간대 기준입니다.</p>
-          <p>천문 계산 <a href="https://github.com/cosinekitty/astronomy" target="_blank" rel="noopener">Astronomy Engine</a> · 날씨 <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a></p>
+          <p>노출값은 출발점이에요. 테스트 컷을 찍고 히스토그램을 보며 조정하세요. 시각은 촬영 장소의 현지 시간대 기준입니다.</p>
         </footer>
       </div>
     </section>

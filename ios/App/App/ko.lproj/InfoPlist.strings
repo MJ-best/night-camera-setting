@@ -1,0 +1,4 @@
+"CFBundleDisplayName" = "밤하늘 촬영";
+"CFBundleName" = "밤하늘 촬영";
+"NSLocationWhenInUseUsageDescription" = "촬영지의 정확한 태양·달·은하수·행성 위치와 밤하늘 날씨 예보를 불러오기 위해 현재 위치가 필요합니다.";
+"NSMotionUsageDescription" = "실시간 나침반 기능으로 카메라 촬영 방향을 안내할 때 기기의 방향 센서를 사용합니다.";

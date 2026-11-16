@@ -6,7 +6,27 @@
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 8080",
-    "test": "TZ=Asia/Seoul node --test 'tests/*.test.js'"
+    "test": "TZ=Asia/Seoul node --test 'tests/*.test.js'",
+    "build:web": "node scripts/build-web.mjs",
+    "cap:sync": "npm run build:web && npx cap sync",
+    "cap:assets": "npx @capacitor/assets generate --assetPath resources --android --ios",
+    "cap:open:android": "npx cap open android",
+    "cap:open:ios": "npx cap open ios"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/browser": "^8.0.5",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/geolocation": "^8.2.4",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/ios": "^8.6.2"
+  }
 }

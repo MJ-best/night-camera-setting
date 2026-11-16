@@ -6,6 +6,7 @@ const FONT_CACHE = 'night-camera-fonts';
 const APP_FILES = [
   './',
   'index.html',
+  'privacy.html',
   'css/style.css',
   'js/app.js',
   'js/astro.js',
@@ -14,13 +15,24 @@ const APP_FILES = [
   'js/compass.js',
   'js/data.js',
   'js/format.js',
+  'js/native.js',
   'js/skymap.js',
   'js/weather.js',
   'vendor/astronomy.browser.min.js',
+  'vendor/capacitor.js',
   'manifest.webmanifest',
-  'icons/icon.svg',
+  'icons/favicon.png',
+  'icons/apple-touch-icon.png',
+  'icons/brand-mark.png',
   'icons/icon-192.png',
   'icons/icon-512.png',
+  'icons/icon-maskable-512.png',
+  'assets/targets/milkyway.webp',
+  'assets/targets/moon.webp',
+  'assets/targets/startrails.webp',
+  'assets/targets/meteor.webp',
+  'assets/targets/planets.webp',
+  'assets/targets/city.webp',
 ];
 
 self.addEventListener('install', (event) => {

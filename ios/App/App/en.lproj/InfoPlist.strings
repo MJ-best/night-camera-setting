@@ -1,0 +1,4 @@
+"CFBundleDisplayName" = "NightSky Shot";
+"CFBundleName" = "NightSky Shot";
+"NSLocationWhenInUseUsageDescription" = "Your location is used to compute local sky positions for the Milky Way, Moon, planets, and night weather forecasts.";
+"NSMotionUsageDescription" = "Device orientation sensors are used for the live compass aiming guide.";

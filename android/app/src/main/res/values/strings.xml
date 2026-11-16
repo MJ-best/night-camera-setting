@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">밤하늘 촬영</string>
+    <string name="title_activity_main">밤하늘 촬영</string>
+    <string name="package_name">com.mjbest.nightskyshot</string>
+    <string name="custom_url_scheme">com.mjbest.nightskyshot</string>
+</resources>

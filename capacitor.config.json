@@ -1,0 +1,32 @@
+{
+  "appId": "com.mjbest.nightskyshot",
+  "appName": "밤하늘 촬영",
+  "webDir": "www",
+  "backgroundColor": "#070a12",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 3000,
+      "launchAutoHide": false,
+      "backgroundColor": "#070a12",
+      "androidSplashResourceName": "splash",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "StatusBar": {
+      "overlaysWebView": false,
+      "style": "DARK",
+      "backgroundColor": "#070a12"
+    }
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#070a12",
+    "preferredContentMode": "mobile"
+  },
+  "android": {
+    "backgroundColor": "#070a12",
+    "allowMixedContent": false
+  }
+}

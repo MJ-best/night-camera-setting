@@ -1,3 +1,22 @@
 node_modules/
 _site/
+www/
 .DS_Store
+
+# Native build artifacts & secrets
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/capacitor-cordova-android-plugins/build/
+android/app/release/
+*.jks
+*.keystore
+keystore.properties
+
+ios/App/build/
+ios/App/Pods/
+ios/DerivedData/
+*.p8
+*.p12
+*.mobileprovision

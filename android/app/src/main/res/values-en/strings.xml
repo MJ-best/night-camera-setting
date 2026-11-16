@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">NightSky Shot</string>
+    <string name="title_activity_main">NightSky Shot</string>
+    <string name="package_name">com.mjbest.nightskyshot</string>
+    <string name="custom_url_scheme">com.mjbest.nightskyshot</string>
+</resources>
