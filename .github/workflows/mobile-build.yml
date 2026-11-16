@@ -32,12 +32,22 @@ jobs:
           npm test
           npm run cap:sync
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Set up Android SDK & licenses
+        run: |
+          ANDROID_SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDK_MANAGER=$(find "$ANDROID_SDK/cmdline-tools" -name sdkmanager -type f 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$SDK_MANAGER" ]; then
+            echo "sdkmanager not found under $ANDROID_SDK" >&2
+            exit 1
+          fi
+          set +o pipefail
+          yes | "$SDK_MANAGER" --sdk_root="$ANDROID_SDK" --licenses >/dev/null
+          set -o pipefail
+          "$SDK_MANAGER" --sdk_root="$ANDROID_SDK" "platforms;android-36" "platform-tools"
       - name: Decode release keystore (if configured)
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
