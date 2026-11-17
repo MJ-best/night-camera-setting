@@ -98,10 +98,32 @@ npm run cap:open:ios
 
 ---
 
-## 3. GitHub Actions 자동 빌드 (`.github/workflows/mobile-build.yml`)
+## 3. GitHub Actions 자동 빌드 · 서명 · 릴리스 (`.github/workflows/mobile-build.yml`)
 
-저장소의 **Actions → Mobile Native Build Check** 워크플로를 수동(`workflow_dispatch`) 또는 태그 푸시(`git tag v1.0.0 && git push --tags`)로 실행하면 Android APK/AAB 및 iOS 빌드를 자동 검증합니다.
+저장소의 **Actions → Mobile Native Build Check** 워크플로를 수동(`workflow_dispatch`) 또는 태그 푸시(`git tag v1.0.0 && git push --tags`)로 실행하면 Android APK/AAB 및 iOS 빌드를 자동 검증합니다. `v*` 태그로 실행하면 빌드된 `.aab`, `.apk`, `.ipa` 파일이 첨부된 **초안(Draft) GitHub Release**가 자동으로 생성됩니다.
 
-릴리스 서명 비밀키(GitHub Secrets)를 등록하면 서명된 `.aab`와 `.ipa`가 아티팩트로 생성됩니다:
-- Android: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
-- iOS: `APPLE_CERT_BASE64`, `APPLE_CERT_PASSWORD`, `APPLE_PROVISIONING_PROFILE_BASE64`, `APPLE_TEAM_ID`
+### GitHub Secrets 등록 방법 (`gh` CLI 또는 GitHub Settings → Secrets and variables → Actions)
+
+#### 1) Android 서명 시크릿
+로컬에서 생성한 릴리스 keystore를 base64로 인코딩해 등록합니다 (`ANDROID_KEY_PASSWORD`를 생략하면 `ANDROID_KEYSTORE_PASSWORD`와 동일한 값으로 자동 처리됩니다):
+
+```bash
+# macOS / Linux 공통 (줄바꿈 없이 1줄 인코딩)
+base64 < android/app/nightskyshot-release.keystore | tr -d '\r\n' | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD
+gh secret set ANDROID_KEY_ALIAS --body "nightskyshot"
+gh secret set ANDROID_KEY_PASSWORD   # storePassword와 같으면 생략 가능
+```
+
+#### 2) iOS 서명 시크릿 (macOS 키체인에서 내보낸 `.p12` + `.mobileprovision`)
+Apple Developer Portal에서 `com.mjbest.nightskyshot`용 **App Store Distribution** 프로비저닝 프로파일(`.mobileprovision`)과 배포 인증서(`.p12`)를 준비한 뒤 등록합니다 (`APPLE_TEAM_ID`를 생략하면 프로파일에서 자동 추출됩니다):
+
+```bash
+base64 < Certificates.p12 | tr -d '\r\n' | gh secret set APPLE_CERT_BASE64
+gh secret set APPLE_CERT_PASSWORD
+base64 < NightSkyShot_AppStore.mobileprovision | tr -d '\r\n' | gh secret set APPLE_PROVISIONING_PROFILE_BASE64
+gh secret set APPLE_TEAM_ID --body "YOUR_10CHAR_TEAM_ID"
+```
+
+> 시크릿이 등록되지 않은 상태에서도 워크플로는 정상 동작하며, Android는 미서명(unsigned) AAB와 Debug APK를, iOS는 시뮬레이터 빌드 검증을 수행합니다.
+

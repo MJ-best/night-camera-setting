@@ -28,10 +28,11 @@ android {
     signingConfigs {
         if (hasReleaseKeystore) {
             release {
+                def resolvedStorePassword = keystoreProperties.getProperty("storePassword") ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
                 storeFile rootProject.file(releaseStorePath)
-                storePassword keystoreProperties.getProperty("storePassword") ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                storePassword resolvedStorePassword
                 keyAlias keystoreProperties.getProperty("keyAlias") ?: System.getenv("ANDROID_KEY_ALIAS")
-                keyPassword keystoreProperties.getProperty("keyPassword") ?: System.getenv("ANDROID_KEY_PASSWORD")
+                keyPassword keystoreProperties.getProperty("keyPassword") ?: System.getenv("ANDROID_KEY_PASSWORD") ?: resolvedStorePassword
             }
         }
     }

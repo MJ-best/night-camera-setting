@@ -12,6 +12,7 @@ on:
       - 'capacitor.config.json'
       - 'package.json'
       - 'scripts/build-web.mjs'
+      - '.github/workflows/mobile-build.yml'
 
 permissions:
   contents: read
@@ -48,33 +49,52 @@ jobs:
           yes | "$SDK_MANAGER" --sdk_root="$ANDROID_SDK" --licenses >/dev/null
           set -o pipefail
           "$SDK_MANAGER" --sdk_root="$ANDROID_SDK" "platforms;android-36" "platform-tools"
-      - name: Decode release keystore (if configured)
+      - name: Decode & verify release keystore (if configured)
+        id: android-sign
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
-            printf 'storeFile=app/release.keystore\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
-              "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_ALIAS" "$ANDROID_KEY_PASSWORD" \
-              > android/keystore.properties
+            if [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ]; then
+              echo "ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_ALIAS must be set when ANDROID_KEYSTORE_BASE64 is configured." >&2
+              exit 1
+            fi
+            echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n' | base64 --decode > android/app/release.keystore
+            keytool -list -keystore android/app/release.keystore \
+              -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+              -alias "$ANDROID_KEY_ALIAS" >/dev/null
+            printf 'storeFile=app/release.keystore\n' > android/keystore.properties
+            echo "signed=true" >> "$GITHUB_OUTPUT"
           else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
             echo "ANDROID_KEYSTORE_BASE64 is not configured; building unsigned release AAB."
           fi
       - name: Build Android Debug APK & Release AAB
         working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
           ./gradlew bundleRelease
+          if [ "${{ steps.android-sign.outputs.signed }}" = "true" ]; then
+            ./gradlew assembleRelease
+            jarsigner -verify app/build/outputs/bundle/release/app-release.aab
+          fi
+      - name: Clean up Android keystore files
+        if: always()
+        run: rm -f android/app/release.keystore android/keystore.properties
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
           name: android-builds
           path: |
             android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/apk/release/*.apk
             android/app/build/outputs/bundle/release/*.aab
 
   ios:
@@ -102,7 +122,7 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO
-      - name: Archive signed iOS IPA (if certificates configured)
+      - name: Archive & export signed iOS IPA (if certificates configured)
         id: ios-archive
         env:
           APPLE_CERT_BASE64: ${{ secrets.APPLE_CERT_BASE64 }}
@@ -111,38 +131,134 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           if [ -n "$APPLE_CERT_BASE64" ] && [ -n "$APPLE_PROVISIONING_PROFILE_BASE64" ]; then
-            KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-            CERT_PATH=$RUNNER_TEMP/certificate.p12
-            PROFILE_PATH=$RUNNER_TEMP/profile.mobileprovision
-            echo "$APPLE_CERT_BASE64" | base64 --decode > "$CERT_PATH"
-            echo "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
+            KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+            CERT_PATH="$RUNNER_TEMP/certificate.p12"
+            PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+            PROFILE_PLIST="$RUNNER_TEMP/profile.plist"
+            EXPORT_PLIST="$RUNNER_TEMP/ExportOptionsCI.plist"
+
+            echo "$APPLE_CERT_BASE64" | tr -d '\r\n' | base64 --decode > "$CERT_PATH"
+            echo "$APPLE_PROVISIONING_PROFILE_BASE64" | tr -d '\r\n' | base64 --decode > "$PROFILE_PATH"
+
+            security cms -D -i "$PROFILE_PATH" > "$PROFILE_PLIST"
+            PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$PROFILE_PLIST")
+            PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" "$PROFILE_PLIST")
+            TEAM_ID="${APPLE_TEAM_ID:-$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" "$PROFILE_PLIST")}"
+
+            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+            cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID.mobileprovision"
+
             security create-keychain -p "ci-temp-keychain" "$KEYCHAIN_PATH"
             security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
             security unlock-keychain -p "ci-temp-keychain" "$KEYCHAIN_PATH"
             security import "$CERT_PATH" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-            security list-keychains -d user -s "$KEYCHAIN_PATH"
-            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-            cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "ci-temp-keychain" "$KEYCHAIN_PATH"
+            security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+            security default-keychain -s "$KEYCHAIN_PATH"
+
+            SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -E "Apple Distribution|iPhone Distribution" | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/' || true)
+            if [ -z "$SIGNING_IDENTITY" ]; then
+              SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -E '^\s*[0-9]+\)' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+            fi
+            if [ -z "$SIGNING_IDENTITY" ]; then
+              echo "No valid codesigning identity found in imported certificate." >&2
+              exit 1
+            fi
+
+            EXPORT_METHOD=$(python3 - "$PROFILE_PLIST" <<'PY'
+          import plistlib, sys
+          with open(sys.argv[1], 'rb') as f:
+              p = plistlib.load(f)
+          ent = p.get('Entitlements', {})
+          if p.get('ProvisionsAllDevices'):
+              print('enterprise')
+          elif 'ProvisionedDevices' in p:
+              print('development' if ent.get('get-task-allow') else 'ad-hoc')
+          else:
+              print('app-store-connect')
+          PY
+            )
+
+            python3 - "$EXPORT_PLIST" "$EXPORT_METHOD" "$TEAM_ID" "$PROFILE_NAME" "$SIGNING_IDENTITY" <<'PY'
+          import plistlib, sys
+          out_path, method, team_id, profile_name, cert_name = sys.argv[1:]
+          opts = {
+              'destination': 'export',
+              'method': method,
+              'signingStyle': 'manual',
+              'teamID': team_id,
+              'signingCertificate': cert_name,
+              'provisioningProfiles': {
+                  'com.mjbest.nightskyshot': profile_name,
+              },
+              'stripSwiftSymbols': True,
+              'uploadSymbols': True,
+          }
+          if method == 'app-store-connect':
+              opts['manageAppVersionAndBuildNumber'] = True
+          with open(out_path, 'wb') as f:
+              plistlib.dump(opts, f)
+          PY
+
             xcodebuild archive \
               -project ios/App/App.xcodeproj \
               -scheme App \
               -configuration Release \
+              -destination 'generic/platform=iOS' \
               -archivePath "$RUNNER_TEMP/App.xcarchive" \
-              DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-              -allowProvisioningUpdates
+              CODE_SIGN_STYLE=Manual \
+              DEVELOPMENT_TEAM="$TEAM_ID" \
+              PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+              CODE_SIGN_IDENTITY="$SIGNING_IDENTITY"
+
             xcodebuild -exportArchive \
               -archivePath "$RUNNER_TEMP/App.xcarchive" \
               -exportPath "$RUNNER_TEMP/export" \
-              -exportOptionsPlist ios/App/ExportOptions.plist \
-              -allowProvisioningUpdates
+              -exportOptionsPlist "$EXPORT_PLIST"
+
             echo "signed=true" >> "$GITHUB_OUTPUT"
           else
             echo "signed=false" >> "$GITHUB_OUTPUT"
             echo "APPLE_CERT_BASE64 / APPLE_PROVISIONING_PROFILE_BASE64 not configured; skipping IPA archive."
           fi
+      - name: Clean up iOS signing keychain & temporary files
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/certificate.p12" "$RUNNER_TEMP/profile.mobileprovision" "$RUNNER_TEMP/profile.plist" "$RUNNER_TEMP/ExportOptionsCI.plist"
       - name: Upload iOS IPA (when signed)
         if: ${{ steps.ios-archive.outputs.signed == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
           path: ${{ runner.temp }}/export/*.ipa
+
+  release:
+    name: Create Draft GitHub Release (on tag)
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    needs: [android, ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Upload build artifacts to draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          FILES=(artifacts/android-builds/*.aab artifacts/android-builds/*.apk artifacts/ios-ipa/*.ipa)
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "No release artifacts found to attach." >&2
+            exit 1
+          fi
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${FILES[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${FILES[@]}" \
+              --draft \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi

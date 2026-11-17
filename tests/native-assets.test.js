@@ -155,10 +155,16 @@ test('서비스 워커 캐시 목록, 매니페스트, 테마 일러스트, 네�
     'ios/App/App/ko.lproj/InfoPlist.strings',
     'ios/App/App/en.lproj/InfoPlist.strings',
     'ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png',
+    'ios/App/ExportOptions.plist',
+    'android/app/build.gradle',
+    '.github/workflows/mobile-build.yml',
     'store-assets/app-store/app-icon-1024x1024.png',
     'store-assets/google-play/app-icon-512x512.png',
     'store-assets/google-play/feature-graphic-1024x500.png',
   ]) {
     assert.ok(fs.existsSync(path.join(ROOT, rel)), `누락된 모바일/스토어 파일: ${rel}`);
   }
+
+  const exportPlist = fs.readFileSync(path.join(ROOT, 'ios/App/ExportOptions.plist'), 'utf8');
+  assert.match(exportPlist, /<key>destination<\/key>\s*<string>export<\/string>/);
 });
