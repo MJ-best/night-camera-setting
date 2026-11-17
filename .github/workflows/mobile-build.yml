@@ -248,8 +248,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          shopt -s nullglob
-          FILES=(artifacts/android-builds/*.aab artifacts/android-builds/*.apk artifacts/ios-ipa/*.ipa)
+          mapfile -t FILES < <(find artifacts -type f \( -name '*.aab' -o -name '*.apk' -o -name '*.ipa' \) | sort)
           if [ ${#FILES[@]} -eq 0 ]; then
             echo "No release artifacts found to attach." >&2
             exit 1
