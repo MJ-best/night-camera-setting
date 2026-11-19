@@ -87,14 +87,17 @@ npm run cap:open:ios
 2. 메뉴 **Product → Archive** 실행.
 3. Organizer 창에서 **Distribute App → App Store Connect → Upload** 순서로 진행합니다.
    - 또는 터미널 CLI: `xcodebuild archive` 및 `xcodebuild -exportArchive -exportOptionsPlist ios/App/ExportOptions.plist`.
-4. `Info.plist`에 `ITSAppUsesNonExemptEncryption = false`가 이미 설정되어 있어 수출 규정 준수 절차가 간소화됩니다.
+4. `Info.plist`에 `ITSAppUsesNonExemptEncryption = false`, `PrivacyInfo.xcprivacy`에 앱 개인정보 매니페스트(추적 없음, 앱 기능용 위치 사용)가 이미 포함되어 있어 심사 제출 절차가 간소화됩니다.
 
-### D. App Store Connect 등록 체크리스트
+### D. App Store Connect 등록 체크리스트 (iPhone · iPad 공용)
 1. **앱 추가**: 플랫폼 `iOS`, 이름 `밤하늘 촬영 플래너`, 기본 언어 `한국어`, 번들 ID `com.mjbest.nightskyshot`.
 2. **앱 정보 & 가격**: 카테고리 `사진 및 비디오`, 가격 `무료`, 개인정보 처리방침 URL 입력.
 3. **앱 개인정보(App Privacy)**: `STORE_LISTING.md` 3번 항목대로 `Location(기능 목적, 사용자와 연결 안 됨, 추적 안 함)` 설정.
-4. **버전 정보 & 스크린샷**: `store-assets/app-store/screenshots/*.png` (6.7" 디스플레이) 업로드 및 `STORE_LISTING.md`의 설명/키워드/심사 메모(App Review Notes) 입력.
-5. **빌드 선택 후 심사 제출**: TestFlight 내부 테스트 확인 후 **심사에 추가(Add for Review)**.
+4. **버전 정보 & 스크린샷**:
+   - **iPhone 6.7" 디스플레이**: `store-assets/app-store/screenshots/*.png` (1290×2796, 6장) 업로드
+   - **iPad 13" 디스플레이**: `store-assets/app-store/ipad-screenshots/*.png` (2048×2732, 6장) 업로드
+   - `STORE_LISTING.md`의 설명·키워드·심사 메모(App Review Notes) 입력
+5. **빌드 선택 후 심사 제출**: TestFlight 내부 테스트(iPhone/iPad 실기기) 확인 후 **심사에 추가(Add for Review)**.
 
 ---
 
@@ -125,5 +128,15 @@ base64 < NightSkyShot_AppStore.mobileprovision | tr -d '\r\n' | gh secret set AP
 gh secret set APPLE_TEAM_ID --body "YOUR_10CHAR_TEAM_ID"
 ```
 
+#### 3) App Store Connect(TestFlight) 자동 업로드 시크릿 (선택)
+App Store Connect → **사용자 및 액세스 → 통합 → App Store Connect API**에서 `App Manager` 권한의 API 키(`.p8`)를 발급해 아래 3개 시크릿을 추가하면, `v*` 태그 푸시 또는 수동 실행(`upload_to_app_store=true`) 시 `xcrun altool`이 `.ipa`를 자동 검증·업로드합니다:
+
+```bash
+base64 < AuthKey_XXXXXXXXXX.p8 | tr -d '\r\n' | gh secret set ASC_API_KEY_BASE64
+gh secret set ASC_KEY_ID --body "XXXXXXXXXX"
+gh secret set ASC_ISSUER_ID --body "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+```
+
 > 시크릿이 등록되지 않은 상태에서도 워크플로는 정상 동작하며, Android는 미서명(unsigned) AAB와 Debug APK를, iOS는 시뮬레이터 빌드 검증을 수행합니다.
+
 

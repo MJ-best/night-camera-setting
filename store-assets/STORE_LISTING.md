@@ -106,12 +106,12 @@
 > 아래 내용을 App Store Connect 제출 시 **App Review Information → Notes**에 입력하면 심사가 빠르게 진행됩니다.
 
 ```
-NightSky Shot Planner works completely offline after launch without any login or account.
+NightSky Shot Planner is a Universal app for iPhone and iPad that works completely offline after launch without any login or account.
 
 How to test core features indoors during review:
 1. Location & Weather: On Page 1 ("준비"), tap "현재 위치 가져오기 (GPS)" to test CoreLocation, or enter any latitude/longitude directly (default is Seoul 37.5665, 126.9780). Weather is fetched over HTTPS from api.open-meteo.com only after setting a non-default location or tapping "다시 받기".
 2. Target Modes & Camera Settings: On Page 2 ("상황"), select any of the 6 targets (Milky Way, Moon, Star Trails, Meteor Showers, Planets, City Nightscape) and adjust lens focal length/aperture, then swipe to Page 3 ("설정") for calculated exposure values.
-3. Live Compass & Sky Map: On Page 4 ("방향"), tap "실시간 나침반" on a physical iPhone to view live CoreLocation heading alignment against the target azimuth.
+3. Live Compass & Sky Map: On Page 4 ("방향"), tap "실시간 나침반" on a physical iPhone or iPad to view live CoreLocation heading alignment against the target azimuth. Both portrait and landscape orientations are supported.
 4. Night Vision Mode: Tap the top-right "적색 모드" button at any time to cycle Normal -> Red -> Green screen filter modes.
 ```
 
@@ -122,7 +122,8 @@ How to test core features indoors during review:
 | 용도 | 파일 경로 | 규격 |
 |---|---|---|
 | App Store 앱 아이콘 | [app-icon-1024x1024.png](file:///home/antigravity/MJ-best/night-camera-setting/store-assets/app-store/app-icon-1024x1024.png) | 1024×1024 PNG (알파 없음) |
+| iOS iPhone 6.7" 스크린샷 (6장) | `store-assets/app-store/screenshots/*.png` | 1290×2796 PNG (알파 없음) |
+| iOS iPad 13" 스크린샷 (6장) | `store-assets/app-store/ipad-screenshots/*.png` | 2048×2732 PNG (알파 없음) |
 | Google Play 앱 아이콘 | [app-icon-512x512.png](file:///home/antigravity/MJ-best/night-camera-setting/store-assets/google-play/app-icon-512x512.png) | 512×512 PNG |
 | Google Play 그래픽 이미지 | [feature-graphic-1024x500.png](file:///home/antigravity/MJ-best/night-camera-setting/store-assets/google-play/feature-graphic-1024x500.png) | 1024×500 PNG |
-| iOS 6.7" 스크린샷 | `store-assets/app-store/screenshots/*.png` | 1290×2796 PNG |
-| Android 폰 스크린샷 | `store-assets/google-play/screenshots/*.png` | 1080×1920 PNG |
+| Android 폰 스크린샷 (6장) | `store-assets/google-play/screenshots/*.png` | 1080×1920 PNG |
