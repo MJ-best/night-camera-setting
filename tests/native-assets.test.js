@@ -152,6 +152,7 @@ test('서비스 워커 캐시 목록, 매니페스트, 테마 일러스트, 네�
     'ios/App/App/CompassPlugin.swift',
     'ios/App/App/SceneDelegate.swift',
     'ios/App/App/Info.plist',
+    'ios/App/App/PrivacyInfo.xcprivacy',
     'ios/App/App/ko.lproj/InfoPlist.strings',
     'ios/App/App/en.lproj/InfoPlist.strings',
     'ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png',
@@ -167,4 +168,36 @@ test('서비스 워커 캐시 목록, 매니페스트, 테마 일러스트, 네�
 
   const exportPlist = fs.readFileSync(path.join(ROOT, 'ios/App/ExportOptions.plist'), 'utf8');
   assert.match(exportPlist, /<key>destination<\/key>\s*<string>export<\/string>/);
+
+  const pbxproj = fs.readFileSync(path.join(ROOT, 'ios/App/App.xcodeproj/project.pbxproj'), 'utf8');
+  assert.match(pbxproj, /PrivacyInfo\.xcprivacy in Resources/);
+  assert.match(pbxproj, /TARGETED_DEVICE_FAMILY = "1,2"/);
+
+  const privacyManifest = fs.readFileSync(path.join(ROOT, 'ios/App/App/PrivacyInfo.xcprivacy'), 'utf8');
+  assert.match(privacyManifest, /<key>NSPrivacyTracking<\/key>\s*<false\/>/);
+
+  const readPngHeader = (rel) => {
+    const buf = fs.readFileSync(path.join(ROOT, rel));
+    assert.equal(buf.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', `유효하지 않은 PNG: ${rel}`);
+    const width = buf.readUInt32BE(16);
+    const height = buf.readUInt32BE(20);
+    const colorType = buf[25];
+    return { width, height, hasAlpha: colorType === 4 || colorType === 6 };
+  };
+
+  const shotNames = [
+    '01-setup.png',
+    '02-situation.png',
+    '03-settings.png',
+    '04-sky.png',
+    '05-tonight.png',
+    '06-nightvision-red.png',
+  ];
+  for (const name of shotNames) {
+    const iphone = readPngHeader(`store-assets/app-store/screenshots/${name}`);
+    assert.deepEqual(iphone, { width: 1290, height: 2796, hasAlpha: false }, `iPhone 스크린샷 규격 불일치: ${name}`);
+
+    const ipad = readPngHeader(`store-assets/app-store/ipad-screenshots/${name}`);
+    assert.deepEqual(ipad, { width: 2048, height: 2732, hasAlpha: false }, `iPad 스크린샷 규격 불일치: ${name}`);
+  }
 });
