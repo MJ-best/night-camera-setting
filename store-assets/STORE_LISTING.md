@@ -122,6 +122,9 @@ How to test core features indoors during review:
 | 용도 | 파일 경로 | 규격 |
 |---|---|---|
 | App Store 앱 아이콘 | [app-icon-1024x1024.png](file:///home/antigravity/MJ-best/night-camera-setting/store-assets/app-store/app-icon-1024x1024.png) | 1024×1024 PNG (알파 없음) |
+| App Store 제품 페이지 헤더 | [header-3840x1646.png](file:///home/antigravity/MJ-best/night-camera-setting/store-assets/app-store/creative-assets/header-3840x1646.png) | 3840×1646 PNG (21:9, 알파 없음) |
+| App Store 검색 결과 에셋 | [search-results-3840x2560.png](file:///home/antigravity/MJ-best/night-camera-setting/store-assets/app-store/creative-assets/search-results-3840x2560.png) | 3840×2560 PNG (3:2, 알파 없음) |
+| App Store 범용 에셋 (선택) | [universal-5244x2950.png](file:///home/antigravity/MJ-best/night-camera-setting/store-assets/app-store/creative-assets/universal-5244x2950.png) | 5244×2950 PNG (16:9, 알파 없음) |
 | iOS iPhone 6.7" 스크린샷 (6장) | `store-assets/app-store/screenshots/*.png` | 1290×2796 PNG (알파 없음) |
 | iOS iPad 13" 스크린샷 (6장) | `store-assets/app-store/ipad-screenshots/*.png` | 2048×2732 PNG (알파 없음) |
 | Google Play 앱 아이콘 | [app-icon-512x512.png](file:///home/antigravity/MJ-best/night-camera-setting/store-assets/google-play/app-icon-512x512.png) | 512×512 PNG |
