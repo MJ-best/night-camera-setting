@@ -5,7 +5,7 @@ import { SkyMap } from './skymap.js';
 import { renderTimeline } from './chart.js';
 import { fetchWeather, summarize, packRows, unpackRows, isNearby, WEATHER_TTL_MS } from './weather.js';
 import { Compass, compassSupported, defaultDeclination } from './compass.js';
-import { STARS, METEOR_SHOWERS, PLANETS } from './data.js';
+import { STARS, METEOR_SHOWERS, PLANETS, PRESET_SPOTS } from './data.js';
 import {
   azimuthName, formatTime, formatDate, formatNightTime, formatRange, formatDuration, formatCoord,
   escapeHtml, moonPhasePath, signedDeg, normDeg,
@@ -32,11 +32,12 @@ const DEFAULTS = {
   declination: null,
   skyMode: 'pano',
   screenMode: 'normal',
-  zone: null, // 촬영 장소의 시간대 { id: IANA 이름, source }
+  zone: { id: 'Asia/Seoul', source: 'preset' }, // 촬영 장소의 시간대 { id: IANA 이름, source }
   places: [],
+  checkedGear: {},
   lenses: Object.fromEntries(Object.entries(cam.TARGETS).map(([k, v]) => [k, { ...v.lens }])),
 };
-const PERSIST = ['target', 'lat', 'lon', 'locSource', 'placeName', 'sensor', 'mp', 'bortle', 'declination', 'skyMode', 'screenMode', 'places', 'lenses', 'zone'];
+const PERSIST = ['target', 'lat', 'lon', 'locSource', 'placeName', 'sensor', 'mp', 'bortle', 'declination', 'skyMode', 'screenMode', 'places', 'checkedGear', 'lenses', 'zone'];
 
 function loadState() {
   try {
@@ -46,10 +47,15 @@ function loadState() {
       // 예전 버전은 적색 모드를 nightVision(true/false)으로 저장했다
       if (!saved.screenMode && saved.nightVision) saved.screenMode = 'red';
       delete saved.nightVision;
-      return { ...DEFAULTS, ...saved, lenses: { ...DEFAULTS.lenses, ...(saved.lenses || {}) } };
+      return {
+        ...DEFAULTS,
+        ...saved,
+        checkedGear: { ...(saved.checkedGear || {}) },
+        lenses: { ...DEFAULTS.lenses, ...(saved.lenses || {}) },
+      };
     }
   } catch { /* 저장소를 못 쓰는 환경 */ }
-  return { ...DEFAULTS, lenses: structuredClone(DEFAULTS.lenses) };
+  return { ...DEFAULTS, checkedGear: {}, lenses: structuredClone(DEFAULTS.lenses) };
 }
 function saveState() {
   try {
@@ -333,9 +339,19 @@ function renderSetupSummary() {
 }
 
 function renderPlaces() {
+  const wrap = $('savedPlacesWrap');
+  if (wrap) wrap.hidden = state.places.length === 0;
   const sel = $('places');
   sel.innerHTML = '<option value="">저장한 장소 불러오기</option>' + state.places
     .map((p, i) => `<option value="${i}">${escapeHtml(p.name)} · ${p.lat.toFixed(2)}, ${p.lon.toFixed(2)}</option>`).join('');
+
+  const presetsEl = $('presetSpots');
+  if (presetsEl) {
+    presetsEl.innerHTML = PRESET_SPOTS.map((sp) => {
+      const active = Math.abs(state.lat - sp.lat) < 0.02 && Math.abs(state.lon - sp.lon) < 0.02;
+      return `<button type="button" class="preset-spot" data-preset="${escapeHtml(sp.id)}" aria-pressed="${active}">${escapeHtml(sp.short)}</button>`;
+    }).join('');
+  }
 }
 
 /* 판정 카드 */
@@ -517,7 +533,7 @@ function renderVerdict() {
   } else if (weather.status === 'loading') {
     chips.push('<span class="chip">날씨 불러오는 중…</span>');
   } else if (!weather.rows) {
-    chips.push('<span class="chip">날씨 정보 없음</span>');
+    chips.push('<button type="button" class="chip chip-action" data-fetch-weather="true">날씨 받아오기</button>');
   }
   const lines = [...v.lines];
   if (wx && wx.cloud >= 45 && state.target !== 'city') lines.unshift(`예보상 구름이 많아요 (평균 ${Math.round(wx.cloud)}%). 가장 맑은 때는 ${formatTime(wx.clearest.t)} 무렵 ${Math.round(wx.clearest.cloud)}%예요.`);
@@ -893,8 +909,15 @@ const STEPS = {
 };
 
 function renderChecklist() {
-  $('gearList').innerHTML = [...(GEAR[state.target] || []), ...(state.target === 'city' ? GEAR_COMMON.slice(0, 2) : GEAR_COMMON)]
-    .map((g) => `<li>${escapeHtml(g)}</li>`).join('');
+  const items = [...(GEAR[state.target] || []), ...(state.target === 'city' ? GEAR_COMMON.slice(0, 2) : GEAR_COMMON)];
+  let anyChecked = false;
+  $('gearList').innerHTML = items.map((g, idx) => {
+    const checked = Boolean(state.checkedGear?.[g]);
+    if (checked) anyChecked = true;
+    return `<li><label class="gear-label${checked ? ' is-checked' : ''}"><input type="checkbox" class="gear-check" data-gear-idx="${idx}" data-gear-name="${escapeHtml(g)}"${checked ? ' checked' : ''}><span>${escapeHtml(g)}</span></label></li>`;
+  }).join('');
+  const resetBtn = $('resetGear');
+  if (resetBtn) resetBtn.hidden = !anyChecked;
   const steps = STEPS[state.target] || STEPS.default;
   $('stepList').innerHTML = steps.map((g) => `<li>${escapeHtml(g)}</li>`).join('');
 }
@@ -924,7 +947,7 @@ function setSelected(date) {
   raf = requestAnimationFrame(() => renderTimeDependent());
 }
 
-/* 날씨: 위치가 정해질 때(준비 페이지)만 받는다. 받은 예보는 기기에 저장해 3시간 동안 다시 쓴다 */
+/* 날씨: 위치가 정해지거나 사용자가 날씨 받기를 누를 때 받는다. 받은 예보는 기기에 저장해 3시간 동안 다시 쓴다 */
 function readWeatherCache() {
   try {
     const c = JSON.parse(localStorage.getItem(WEATHER_KEY));
@@ -961,6 +984,10 @@ async function ensureWeather({ force = false } = {}) {
   }
   weather.status = 'loading';
   renderWeatherStatus();
+  if (night) {
+    renderVerdict();
+    renderWeatherInfo();
+  }
   try {
     const { rows, tz } = await fetchWeather(here.lat, here.lon);
     if (req !== weatherRequest) return;
@@ -1012,11 +1039,11 @@ function renderWeatherStatus() {
   const wx = nightWeather();
   const tonight = wx ? ` · 이 날 밤 구름 <b>${Math.round(wx.cloud)}%</b> ${escapeHtml(wx.sky)}` : weather.rows ? ' · 고른 날짜는 예보 범위(16일) 밖이에요' : '';
   const msg = {
-    idle: state.locSource === 'default' ? '위치를 정하면 그곳의 예보를 받아요.' : '아직 받지 않았어요.',
+    idle: state.locSource === 'default' ? '위치를 정하거나 ‘다시 받기’를 누르면 예보를 받아요.' : '아직 받지 않았어요.',
     loading: '예보를 받는 중…',
     ok: `${got}${tonight}`,
     stale: `새로 받지 못해 저장된 예보를 써요. ${got}${tonight}`,
-    offline: '오프라인이에요. 인터넷이 될 때 ‘예보 다시 받기’를 누르세요. 천문 계산은 그대로 돼요.',
+    offline: '오프라인이에요. 인터넷이 될 때 ‘다시 받기’를 누르세요. 천문 계산은 그대로 돼요.',
     error: '예보를 받지 못했어요. 인터넷 연결을 확인하고 다시 받아 보세요. 천문 계산은 그대로 돼요.',
   }[weather.status];
   el.innerHTML = msg;
@@ -1028,20 +1055,24 @@ function renderWeatherInfo() {
   const wx = nightWeather();
   if (!wx) {
     badge.textContent = weather.status === 'loading' ? '날씨 불러오는 중…' : '';
-    el.textContent = weather.rows
-      ? '이 날짜는 날씨 예보 범위(16일) 밖이에요.'
-      : weather.status === 'loading' ? '' : '날씨 예보가 없어요. 준비 페이지에서 받을 수 있어요. 천문 계산은 그대로 돼요.';
+    if (weather.rows) {
+      el.innerHTML = '<p>이 날짜는 날씨 예보 범위(16일) 밖이에요.</p>';
+    } else if (weather.status === 'loading') {
+      el.innerHTML = '<p>날씨 예보를 불러오는 중이에요…</p>';
+    } else {
+      el.innerHTML = '<p>날씨 예보가 아직 없어요. 천문 계산은 그대로 돼요.</p><button type="button" class="btn small" data-fetch-weather="true">날씨 받아오기</button>';
+    }
     return;
   }
   badge.textContent = `구름 ${Math.round(wx.cloud)}% · ${wx.sky}`;
   const bits = [`밤 동안 평균 구름 ${Math.round(wx.cloud)}%`, `최저 ${Math.round(wx.minTemp)}°C`, `습도 ${Math.round(wx.rh)}%`, `최대 풍속 ${wx.maxWind.toFixed(1)}m/s`];
   if (wx.dewRisk) bits.push('기온과 이슬점이 가까워 렌즈에 이슬이 맺히기 쉬워요. 렌즈 히터를 챙기세요');
-  el.textContent = `${bits.join(' · ')}. (Open-Meteo 예보, ${ago(weather.at)} 받음)`;
+  el.innerHTML = `<p>${escapeHtml(bits.join(' · '))}. (Open-Meteo 예보, ${escapeHtml(ago(weather.at))} 받음)</p>`;
 }
 
-/* 페이지 넘기기 */
-const PAGE = { setup: 0, situation: 1, settings: 2, sky: 3, tonight: 4, ref: 5 };
-let currentPage = 0;
+/* 페이지 넘기기 (5탭: 설정 · 상황 · 방향 · 오늘 밤 · 참고) */
+const PAGE = { settings: 0, situation: 1, sky: 2, tonight: 3, ref: 4 };
+let currentPage = PAGE.settings;
 
 function pageCount() {
   return $('pager').children.length;
@@ -1061,7 +1092,7 @@ function setPage(i) {
     if (Number(b.dataset.goto) === i) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
-  $('timebar').hidden = i === PAGE.setup || i === PAGE.situation || i === PAGE.ref;
+  $('timebar').hidden = i === PAGE.situation || i === PAGE.ref;
   if (!changed) return;
   if (i === PAGE.tonight) scheduleScan();
   if (i === PAGE.sky) skyMap.render();
@@ -1206,12 +1237,66 @@ function bind() {
     goToPage(Number(b.dataset.goto));
   }));
   document.addEventListener('click', (e) => {
+    const wxBtn = e.target.closest && e.target.closest('[data-fetch-weather="true"]');
+    if (wxBtn) {
+      hapticTap('LIGHT');
+      ensureWeather({ force: true });
+      return;
+    }
+    const presetBtn = e.target.closest && e.target.closest('[data-preset]');
+    if (presetBtn) {
+      const sp = PRESET_SPOTS.find((x) => x.id === presetBtn.dataset.preset);
+      if (sp) {
+        hapticTap('LIGHT');
+        state.bortle = sp.bortle;
+        setLocation(sp.lat, sp.lon, 'preset', sp.name, { id: sp.tz, source: 'preset' });
+        $('gpsStatus').textContent = `‘${sp.name}’ (광해 ${sp.bortle})으로 설정했어요.`;
+      }
+      return;
+    }
     const link = e.target.closest && e.target.closest('a[data-external="true"]');
     if (!link || !isNativeApp()) return;
     e.preventDefault();
     openExternalUrl(link.href);
   });
+
+  // 준비물 체크박스 토글 및 초기화
+  $('gearList').addEventListener('change', (e) => {
+    const input = e.target.closest && e.target.closest('.gear-check');
+    if (!input) return;
+    const name = input.dataset.gearName;
+    if (!name) return;
+    if (!state.checkedGear) state.checkedGear = {};
+    if (input.checked) state.checkedGear[name] = true;
+    else delete state.checkedGear[name];
+    input.closest('.gear-label')?.classList.toggle('is-checked', input.checked);
+    const resetBtn = $('resetGear');
+    if (resetBtn) resetBtn.hidden = Object.keys(state.checkedGear).length === 0;
+    hapticTap('LIGHT');
+    saveState();
+  });
+  $('resetGear').addEventListener('click', () => {
+    state.checkedGear = {};
+    hapticTap('LIGHT');
+    saveState();
+    renderChecklist();
+  });
+
+  // 위치·날짜·카메라 바텀시트 열기/닫기
+  $('openSetupTop').addEventListener('click', openSetupSheet);
+  $('openSetupBar').addEventListener('click', openSetupSheet);
+  $('closeSetupSheet').addEventListener('click', closeSetupSheet);
+  $('setupSheet').addEventListener('click', (e) => {
+    if (e.target === $('setupSheet')) closeSetupSheet();
+  });
+
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isSetupSheetOpen()) {
+      e.preventDefault();
+      closeSetupSheet();
+      return;
+    }
+    if (isSetupSheetOpen()) return;
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (e.target.closest && e.target.closest('input, select, textarea, [contenteditable]')) return;
     if (e.key === 'ArrowRight') { e.preventDefault(); goToPage(currentPage + 1); }
@@ -1230,11 +1315,23 @@ function bind() {
   });
 }
 
+function isSetupSheetOpen() {
+  return !$('setupSheet').hidden;
+}
+function openSetupSheet() {
+  $('setupSheet').hidden = false;
+  hapticTap('LIGHT');
+}
+function closeSetupSheet() {
+  $('setupSheet').hidden = true;
+  hapticTap('LIGHT');
+}
+
 // 버튼을 누를 때마다 기본 → 적색 → 녹색 → 기본
 const SCREEN_MODES = {
-  normal: { next: 'red', label: '적색 모드', title: '누르면 적색 화면으로 바뀌어요 (눈의 암적응 유지)' },
-  red: { next: 'green', label: '적색 모드', title: '적색 화면 사용 중 · 누르면 녹색 화면으로 바뀌어요' },
-  green: { next: 'normal', label: '녹색 모드', title: '녹색 화면 사용 중 · 누르면 기본 화면으로 돌아가요' },
+  normal: { next: 'red', label: '야간 화면', title: '누르면 적색 화면으로 바뀌어요 (눈의 암적응 유지)' },
+  red: { next: 'green', label: '적색 켜짐', title: '적색 화면 사용 중 · 누르면 녹색 화면으로 바뀌어요' },
+  green: { next: 'normal', label: '녹색 켜짐', title: '녹색 화면 사용 중 · 누르면 기본 화면으로 돌아가요' },
 };
 
 function applyNightVision() {
@@ -1249,6 +1346,10 @@ function applyNightVision() {
   btn.title = mode.title;
   btn.querySelector('span').textContent = mode.label;
   syncStatusBar(state.screenMode);
+  if (night) {
+    skyMap.render();
+    renderTimelinePanel();
+  }
 }
 
 function setLocation(lat, lon, source, name, zone = null) {
@@ -1290,16 +1391,20 @@ function init() {
   bind();
   skyMap.mode = state.skyMode;
   applyNightVision();
-  setPage(PAGE.setup);
+  setPage(PAGE.settings);
   applyZone();
   state.date = nightDateStrAt(new Date());
   recompute();
-  // 예시 위치(서울)로는 예보를 받지 않는다. 위치를 정하면 그때 받는다
+  // 예시 위치(서울)로는 자동 예보를 받지 않는다. 위치를 정하거나 날씨 받기를 누르면 받는다
   if (state.locSource !== 'default') ensureWeather();
   else renderWeatherStatus();
   registerBackHandler(() => {
+    if (isSetupSheetOpen()) {
+      closeSetupSheet();
+      return true;
+    }
     if (currentPage > 0) {
-      goToPage(currentPage - 1);
+      goToPage(PAGE.settings);
       return true;
     }
     return false;

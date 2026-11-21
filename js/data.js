@@ -291,3 +291,14 @@ export const CONSTELLATION_KO = {
   'Triangulum Australe': '남쪽삼각형', Tucana: '큰부리새', 'Ursa Major': '큰곰', 'Ursa Minor': '작은곰', Vela: '돛',
   Virgo: '처녀', Volans: '날치', Vulpecula: '작은여우',
 };
+
+// 인기 밤하늘 출사지 프리셋 (위도, 경도, 광해 보틀 등급, IANA 시간대)
+export const PRESET_SPOTS = [
+  { id: 'anbandegi', name: '강릉 안반데기', short: '안반데기', lat: 37.6244, lon: 128.7385, bortle: 3, tz: 'Asia/Seoul' },
+  { id: 'yukbaek', name: '평창 육백마지기', short: '육백마지기', lat: 37.3924, lon: 128.5268, bortle: 3, tz: 'Asia/Seoul' },
+  { id: 'hwaaksan', name: '가평 화악산', short: '화악산', lat: 37.9975, lon: 127.5122, bortle: 4, tz: 'Asia/Seoul' },
+  { id: 'hwangmae', name: '합천 황매산', short: '황매산', lat: 35.4956, lon: 127.9739, bortle: 3, tz: 'Asia/Seoul' },
+  { id: 'yeongyang', name: '영양 반딧불이', short: '영양 반딧불이', lat: 36.7834, lon: 129.2478, bortle: 2, tz: 'Asia/Seoul' },
+  { id: 'jeju1100', name: '제주 1100고지', short: '제주 1100고지', lat: 33.3575, lon: 126.4628, bortle: 3, tz: 'Asia/Seoul' },
+];
+

@@ -172,22 +172,29 @@ export class SkyMap {
     };
     const sunAlt = s.sun.alt;
     const starAlpha = sunAlt < -15 ? 1 : sunAlt < -6 ? 0.35 + ((-6 - sunAlt) / 9) * 0.65 : sunAlt < 0 ? 0.12 : 0.04;
+    const bounds = this.mode === 'dome'
+      ? { minX: P.cx - P.R + 4, maxX: P.cx + P.R - 4, minY: P.cy - P.R + 4, maxY: P.cy + P.R - 4 }
+      : { minX: 4, maxX: w - 4, minY: 4, maxY: P.yOf(0) - 4 };
+    const placedLabels = [];
 
     ctx.save();
     // 하늘 배경
     this._drawSkyBackground(ctx, P, w, h, sunAlt, s);
     ctx.save();
     P.clip(ctx);
-    this._drawGrid(ctx, P, w, h, colors);
+    this._drawGrid(ctx, P, w, h, colors, placedLabels);
     if (starAlpha > 0.2) this._drawBand(ctx, P, w, h, s.frame, starAlpha);
-    this._drawConstellations(ctx, P, s.frame, colors, starAlpha);
-    this._drawStars(ctx, P, s.frame, starAlpha, colors);
+    const constLabels = this._drawConstellations(ctx, P, s.frame, colors, starAlpha);
+    const starLabels = this._drawStars(ctx, P, s.frame, starAlpha, colors);
     if (this.mode === 'pano') {
       ctx.fillStyle = colors.ground;
       ctx.fillRect(0, P.yOf(0), w, h);
     }
     if (s.fov) this._drawFov(ctx, P, s.fov, colors);
-    this._drawMarkers(ctx, P, s, colors);
+    this._drawMarkers(ctx, P, s, colors, placedLabels, bounds);
+    // 우선순위 순으로 별 이름 → 별자리 이름을 충돌 회피하며 배치
+    this._drawCollectedLabels(ctx, starLabels, placedLabels, bounds, colors);
+    this._drawCollectedLabels(ctx, constLabels, placedLabels, bounds, colors);
     ctx.restore();
     this._drawFrameDecor(ctx, P, w, h, colors);
     ctx.restore();
@@ -244,17 +251,19 @@ export class SkyMap {
     }
   }
 
-  _drawGrid(ctx, P, w, h, colors) {
+  _drawGrid(ctx, P, w, h, colors, placedLabels = []) {
     ctx.strokeStyle = colors.grid;
     ctx.lineWidth = 1;
     ctx.fillStyle = colors.label;
     ctx.font = '10px "IBM Plex Mono", ui-monospace, monospace';
     if (this.mode === 'dome') {
       for (const alt of [30, 60]) {
+        const ty = P.cy - ((90 - alt) / 90) * P.R - 3;
         ctx.beginPath();
         ctx.arc(P.cx, P.cy, ((90 - alt) / 90) * P.R, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.fillText(`${alt}°`, P.cx + 3, P.cy - ((90 - alt) / 90) * P.R - 3);
+        ctx.fillText(`${alt}°`, P.cx + 3, ty);
+        placedLabels.push({ x1: P.cx + 1, y1: ty - 11, x2: P.cx + 28, y2: ty + 2 });
       }
       for (let az = 0; az < 360; az += 45) {
         const p = P.project(0, az);
@@ -270,7 +279,10 @@ export class SkyMap {
         ctx.moveTo(0, y);
         ctx.lineTo(w, y);
         ctx.stroke();
-        if (alt > 0) ctx.fillText(`${alt}°`, 4, y - 3);
+        if (alt > 0) {
+          ctx.fillText(`${alt}°`, 4, y - 3);
+          placedLabels.push({ x1: 2, y1: y - 14, x2: 32, y2: y + 1 });
+        }
       }
       for (let az = 0; az < 360; az += 45) {
         const p = P.project(0, az);
@@ -336,6 +348,7 @@ export class SkyMap {
     ctx.globalAlpha = Math.max(0.15, alpha);
     ctx.strokeStyle = colors.line;
     ctx.lineWidth = 1;
+    const labels = [];
     const pos = {};
     const at = (id) => {
       if (!pos[id]) {
@@ -354,8 +367,6 @@ export class SkyMap {
       ctx.lineTo(b.x, b.y);
       ctx.stroke();
     };
-    ctx.font = '10.5px "IBM Plex Sans KR", system-ui, sans-serif';
-    ctx.fillStyle = colors.label;
     for (const c of CONSTELLATIONS) {
       const pts = [];
       for (const chain of c.chains) {
@@ -372,19 +383,27 @@ export class SkyMap {
       if (pts.length >= 2 && spread < this.canvas.clientWidth * 0.5) {
         const lx = xs.reduce((a, b) => a + b, 0) / pts.length;
         const ly = pts.reduce((a, q) => a + q.y, 0) / pts.length;
-        ctx.globalAlpha = Math.max(0.25, alpha * 0.7);
-        ctx.fillText(c.label, lx + 6, ly + 14);
-        ctx.globalAlpha = Math.max(0.15, alpha);
+        labels.push({
+          x: lx, y: ly, text: c.label,
+          color: colors.label,
+          alpha: Math.max(0.28, alpha * 0.72),
+          font: '10.5px "IBM Plex Sans KR", system-ui, sans-serif',
+          size: 10.5,
+          r: 4,
+          priority: 100 - pts.length,
+        });
       }
     }
     ctx.setLineDash([3, 5]);
     ctx.strokeStyle = colors.grid;
     for (const a of ASTERISMS) for (let k = 0; k < a.chain.length - 1; k++) seg(at(a.chain[k]), at(a.chain[k + 1]));
     ctx.restore();
+    return labels;
   }
 
   _drawStars(ctx, P, frame, alpha, colors) {
     ctx.save();
+    const labels = [];
     for (const st of STARS) {
       const hpos = frame(st.ra, st.dec);
       if (hpos.alt < -1) continue;
@@ -403,10 +422,15 @@ export class SkyMap {
         ctx.fill();
       }
       if (st.name && st.mag < 1.7 && hpos.alt > 3 && alpha > 0.3) {
-        ctx.globalAlpha = 0.85 * alpha;
-        ctx.fillStyle = colors.text;
-        ctx.font = '11px "IBM Plex Sans KR", system-ui, sans-serif';
-        ctx.fillText(st.name, p.x + r + 3, p.y - r - 1);
+        labels.push({
+          x: p.x, y: p.y, text: st.name,
+          color: colors.text,
+          alpha: 0.88 * alpha,
+          font: '11px "IBM Plex Sans KR", system-ui, sans-serif',
+          size: 11,
+          r: r + 2,
+          priority: st.mag,
+        });
       }
     }
     ctx.globalAlpha = alpha * 0.8;
@@ -420,6 +444,50 @@ export class SkyMap {
       ctx.stroke();
     }
     ctx.restore();
+    labels.sort((a, b) => a.priority - b.priority);
+    return labels;
+  }
+
+  _placeLabel(ctx, item, placed, bounds, colors) {
+    ctx.font = item.font;
+    const tw = ctx.measureText(item.text).width;
+    const th = item.size + 3;
+    const pad = 3;
+    const gap = (item.r || 4) + 3;
+    // 후보 위치: 우상, 우하, 좌상, 좌하, 상단 중앙, 하단 중앙
+    const candidates = item.offsets || [
+      [gap, -gap],
+      [gap, th + 2],
+      [-tw - gap, -gap],
+      [-tw - gap, th + 2],
+      [-tw / 2, -gap - 4],
+      [-tw / 2, th + gap + 2],
+    ];
+    for (const [ox, oy] of candidates) {
+      const tx = item.x + ox;
+      const ty = item.y + oy;
+      const box = { x1: tx - pad, y1: ty - th, x2: tx + tw + pad, y2: ty + 3 };
+      if (box.x1 < bounds.minX || box.x2 > bounds.maxX || box.y1 < bounds.minY || box.y2 > bounds.maxY) continue;
+      const hit = placed.some((b) => !(box.x2 < b.x1 || box.x1 > b.x2 || box.y2 < b.y1 || box.y1 > b.y2));
+      if (hit) continue;
+      placed.push(box);
+      ctx.save();
+      ctx.globalAlpha = item.alpha ?? 1;
+      ctx.font = item.font;
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = colors.ground;
+      ctx.strokeText(item.text, tx, ty);
+      ctx.fillStyle = item.color;
+      ctx.fillText(item.text, tx, ty);
+      ctx.restore();
+      return true;
+    }
+    return false;
+  }
+
+  _drawCollectedLabels(ctx, items, placed, bounds, colors) {
+    for (const item of items) this._placeLabel(ctx, item, placed, bounds, colors);
   }
 
   _drawFov(ctx, P, fov, colors) {
@@ -442,12 +510,11 @@ export class SkyMap {
     ctx.restore();
   }
 
-  _drawMarkers(ctx, P, s, colors) {
+  _drawMarkers(ctx, P, s, colors, placedLabels = [], bounds = { minX: 4, maxX: 9999, minY: 4, maxY: 9999 }) {
     ctx.save();
-    ctx.font = '11.5px "IBM Plex Sans KR", system-ui, sans-serif';
-    const label = (p, text, color, dy = -10) => {
-      ctx.fillStyle = color;
-      ctx.fillText(text, p.x + 8, p.y + dy);
+    const markerFont = '600 11.5px "IBM Plex Sans KR", system-ui, sans-serif';
+    const label = (p, text, color, r = 8) => {
+      this._placeLabel(ctx, { x: p.x, y: p.y, text, color, alpha: 1, font: markerFont, size: 11.5, r }, placedLabels, bounds, colors);
     };
     // 은하 중심
     if (s.gc && s.gc.alt > -2) {
@@ -459,7 +526,7 @@ export class SkyMap {
       ctx.moveTo(p.x - 12, p.y); ctx.lineTo(p.x - 4, p.y);
       ctx.moveTo(p.x + 4, p.y); ctx.lineTo(p.x + 12, p.y);
       ctx.stroke();
-      label(p, '은하 중심', colors.mw, 18);
+      label(p, '은하 중심', colors.mw, 11);
     }
     // 유성우 복사점
     if (s.radiant && s.radiant.alt > -2) {
@@ -473,7 +540,7 @@ export class SkyMap {
         ctx.lineTo(p.x + Math.cos(a) * 13, p.y + Math.sin(a) * 13);
         ctx.stroke();
       }
-      label(p, '복사점', colors.accent, 22);
+      label(p, '복사점', colors.accent, 13);
     }
     // 행성
     for (const pl of s.planets) {
@@ -484,7 +551,7 @@ export class SkyMap {
       ctx.beginPath();
       ctx.arc(p.x, p.y, Math.max(2.4, 3.6 - 0.35 * pl.mag), 0, Math.PI * 2);
       ctx.fill();
-      label(p, pl.name, pl.color, -6);
+      label(p, pl.name, pl.color, 6);
     }
     // 태양 (지평선 위일 때)
     if (s.sun.alt > -1) {
@@ -493,7 +560,7 @@ export class SkyMap {
       ctx.beginPath();
       ctx.arc(p.x, p.y, 9, 0, Math.PI * 2);
       ctx.fill();
-      label(p, '태양', '#ffcf6b', -12);
+      label(p, '태양', '#ffcf6b', 11);
     }
     // 달
     if (s.moon.alt > -1) {
@@ -510,7 +577,7 @@ export class SkyMap {
         ctx.fill(new Path2D(path));
       }
       ctx.restore();
-      label(p, `달 ${Math.round(s.moon.illum * 100)}%`, colors.moon, -12);
+      label(p, `달 ${Math.round(s.moon.illum * 100)}%`, colors.moon, 11);
     }
     // 대상 표시
     if (s.target && s.target.alt > -5) {
