@@ -51,6 +51,7 @@ body {
   color: var(--text);
   font: 15px/1.55 var(--font-body);
   -webkit-tap-highlight-color: transparent;
+  touch-action: pan-x pan-y;
   /* 한글은 어절 단위로 줄바꿈 */
   word-break: keep-all;
   overflow-wrap: break-word;
@@ -419,6 +420,7 @@ input[type='number'], input[type='text'], input[type='date'], select {
   border: 1px solid var(--line);
   background: var(--panel-2);
   color: var(--text);
+  font-size: 16px;
   min-width: 0;
 }
 input[type='number'] { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
