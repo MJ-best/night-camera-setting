@@ -335,7 +335,10 @@ function renderContext() {
 
 function renderSetupSummary() {
   const where = state.placeName || formatCoord(state.lat, state.lon);
-  $('setupSummary').textContent = `${where} · ${formatDateStr(state.date)} 밤 · ${cam.sensorOf(state.sensor).label} ${state.mp}MP · 광해 ${state.bortle}`;
+  const text = `${where} · ${formatDateStr(state.date)} 밤 · ${cam.sensorOf(state.sensor).label} ${state.mp}MP · 광해 ${state.bortle}`;
+  $('setupSummary').textContent = text;
+  const s2 = $('setupSummarySettings');
+  if (s2) s2.textContent = text;
 }
 
 function renderPlaces() {
@@ -1070,18 +1073,25 @@ function renderWeatherInfo() {
   el.innerHTML = `<p>${escapeHtml(bits.join(' · '))}. (Open-Meteo 예보, ${escapeHtml(ago(weather.at))} 받음)</p>`;
 }
 
-/* 페이지 넘기기 (5탭: 설정 · 상황 · 방향 · 오늘 밤 · 참고) */
-const PAGE = { settings: 0, situation: 1, sky: 2, tonight: 3, ref: 4 };
-let currentPage = PAGE.settings;
+/* 페이지 넘기기 (5탭: 상황 · 설정 · 방향 · 오늘 밤 · 참고) */
+const PAGE = { situation: 0, settings: 1, sky: 2, tonight: 3, ref: 4 };
+let currentPage = PAGE.situation;
 
 function pageCount() {
   return $('pager').children.length;
 }
 
+function pageLeft(i) {
+  const pager = $('pager');
+  const el = pager.children[i];
+  return el ? el.offsetLeft : i * pager.clientWidth;
+}
+
 function goToPage(i, { smooth = true } = {}) {
   const pager = $('pager');
   const idx = Math.max(0, Math.min(pageCount() - 1, i));
-  pager.scrollTo({ left: idx * pager.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+  const useSmooth = smooth && !window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  pager.scrollTo({ left: pageLeft(idx), behavior: useSmooth ? 'smooth' : 'auto' });
   setPage(idx);
 }
 
@@ -1225,12 +1235,27 @@ function bind() {
 
   const pager = $('pager');
   let pageRaf = 0;
+  let snapTimer = 0;
+  const alignPager = () => {
+    const i = Math.max(0, Math.min(pageCount() - 1, Math.round(pager.scrollLeft / Math.max(1, pager.clientWidth))));
+    const exact = pageLeft(i);
+    if (Math.abs(pager.scrollLeft - exact) >= 1) {
+      pager.scrollTo({ left: exact, behavior: 'auto' });
+    }
+    if (i !== currentPage) setPage(i);
+  };
   pager.addEventListener('scroll', () => {
     cancelAnimationFrame(pageRaf);
     pageRaf = requestAnimationFrame(() => {
-      const i = Math.round(pager.scrollLeft / Math.max(1, pager.clientWidth));
+      const i = Math.max(0, Math.min(pageCount() - 1, Math.round(pager.scrollLeft / Math.max(1, pager.clientWidth))));
       if (i !== currentPage) setPage(i);
     });
+    clearTimeout(snapTimer);
+    snapTimer = setTimeout(alignPager, 140);
+  }, { passive: true });
+  pager.addEventListener('scrollend', () => {
+    clearTimeout(snapTimer);
+    alignPager();
   }, { passive: true });
   document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => {
     hapticTap('LIGHT');
@@ -1285,6 +1310,7 @@ function bind() {
   // 위치·날짜·카메라 바텀시트 열기/닫기
   $('openSetupTop').addEventListener('click', openSetupSheet);
   $('openSetupBar').addEventListener('click', openSetupSheet);
+  $('openSetupBarSettings')?.addEventListener('click', openSetupSheet);
   $('closeSetupSheet').addEventListener('click', closeSetupSheet);
   $('setupSheet').addEventListener('click', (e) => {
     if (e.target === $('setupSheet')) closeSetupSheet();
@@ -1308,7 +1334,7 @@ function bind() {
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      pager.scrollTo({ left: currentPage * pager.clientWidth, behavior: 'auto' });
+      pager.scrollTo({ left: pageLeft(currentPage), behavior: 'auto' });
       skyMap.render();
       renderTimelinePanel();
     }, 120);
@@ -1391,7 +1417,7 @@ function init() {
   bind();
   skyMap.mode = state.skyMode;
   applyNightVision();
-  setPage(PAGE.settings);
+  setPage(PAGE.situation);
   applyZone();
   state.date = nightDateStrAt(new Date());
   recompute();
@@ -1404,7 +1430,7 @@ function init() {
       return true;
     }
     if (currentPage > 0) {
-      goToPage(PAGE.settings);
+      goToPage(PAGE.situation);
       return true;
     }
     return false;

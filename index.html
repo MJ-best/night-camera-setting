@@ -42,49 +42,21 @@
 
   <main class="pager" id="pager" aria-label="화면 페이지">
 
-    <!-- 1. 촬영 설정 (첫 화면: 열자마자 오늘 밤 판정과 카메라 설정을 바로 보여 준다) -->
-    <section class="page" id="page-settings" aria-label="촬영 설정">
-      <div class="wrap page-inner narrow">
-        <button type="button" class="setup-bar" id="openSetupBar" aria-haspopup="dialog" aria-controls="setupSheet">
-          <span class="setup-bar-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 21s-6-5.2-6-10a6 6 0 1 1 12 0c0 4.8-6 10-6 10z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="11" r="2.2" fill="currentColor"/></svg>
-          </span>
-          <span class="setup-bar-text" id="setupSummary">위치와 카메라 불러오는 중…</span>
-          <span class="setup-bar-cta">변경</span>
-        </button>
-
-        <section class="verdict" id="verdict" aria-live="polite"></section>
-
-        <section class="panel settings" aria-labelledby="settingsTitle">
-          <div class="panel-head">
-            <h2 id="settingsTitle">카메라 설정</h2>
-            <span class="time-tag" id="settingsTime"></span>
-          </div>
-          <p class="mode-line" id="modeLine"></p>
-          <div class="lcd" id="lcd">
-            <div class="lcd-cell"><span class="lcd-label">ISO</span><output class="lcd-value" id="lcdIso">—</output></div>
-            <div class="lcd-cell"><span class="lcd-label">조리개</span><output class="lcd-value" id="lcdAperture">—</output></div>
-            <div class="lcd-cell"><span class="lcd-label">셔터</span><output class="lcd-value" id="lcdShutter">—</output></div>
-            <div class="lcd-cell"><span class="lcd-label">화이트밸런스</span><output class="lcd-value small" id="lcdWb">—</output></div>
-          </div>
-          <dl class="meta" id="settingsMeta"></dl>
-          <div class="alts" id="alts" role="list"></div>
-          <ul class="notes" id="warnings"></ul>
-          <details class="basis">
-            <summary>계산 근거 보기</summary>
-            <ul id="basis"></ul>
-          </details>
-        </section>
-      </div>
-    </section>
-
-    <!-- 2. 상황: 무엇을 찍을지와 그 상황의 렌즈 -->
+    <!-- 1. 상황 (첫 화면: 무엇을 찍을지 고르고 위치·렌즈를 맞춰 설정으로 이동) -->
     <section class="page" id="page-situation" aria-label="촬영 상황">
       <div class="wrap page-inner narrow">
         <div class="page-head">
           <h2>오늘 밤 무엇을 찍을까요?</h2>
           <p class="hint" id="situationHint">카드마다 오늘 밤 조건을 미리 보여 드려요.</p>
         </div>
+
+        <button type="button" class="setup-bar" id="openSetupBar" aria-haspopup="dialog" aria-controls="setupSheet">
+          <span class="setup-bar-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 21s-6-5.2-6-10a6 6 0 1 1 12 0c0 4.8-6 10-6 10z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="11" r="2.2" fill="currentColor"/></svg>
+          </span>
+          <span class="setup-bar-text" id="setupSummary">위치와 카메라 불러오는 중…</span>
+          <span class="setup-bar-cta">위치·카메라</span>
+        </button>
 
         <div class="target-grid" role="group" aria-label="촬영 상황">
           <button type="button" class="target-card" data-target="milkyway" aria-pressed="false">
@@ -146,7 +118,43 @@
           <p class="hint">줌렌즈는 실제로 쓸 초점거리를 넣으세요. 상황마다 따로 기억해요.</p>
         </section>
 
-        <button class="btn primary wide" type="button" data-goto="0" id="toSettings">촬영 설정 보기 →</button>
+        <button class="btn primary wide" type="button" data-goto="1" id="toSettings">촬영 설정 보기 →</button>
+      </div>
+    </section>
+
+    <!-- 2. 촬영 설정 -->
+    <section class="page" id="page-settings" aria-label="촬영 설정">
+      <div class="wrap page-inner narrow">
+        <button type="button" class="setup-bar" id="openSetupBarSettings" aria-haspopup="dialog" aria-controls="setupSheet">
+          <span class="setup-bar-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 21s-6-5.2-6-10a6 6 0 1 1 12 0c0 4.8-6 10-6 10z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="11" r="2.2" fill="currentColor"/></svg>
+          </span>
+          <span class="setup-bar-text" id="setupSummarySettings">위치와 카메라 불러오는 중…</span>
+          <span class="setup-bar-cta">변경</span>
+        </button>
+
+        <section class="verdict" id="verdict" aria-live="polite"></section>
+
+        <section class="panel settings" aria-labelledby="settingsTitle">
+          <div class="panel-head">
+            <h2 id="settingsTitle">카메라 설정</h2>
+            <span class="time-tag" id="settingsTime"></span>
+          </div>
+          <p class="mode-line" id="modeLine"></p>
+          <div class="lcd" id="lcd">
+            <div class="lcd-cell"><span class="lcd-label">ISO</span><output class="lcd-value" id="lcdIso">—</output></div>
+            <div class="lcd-cell"><span class="lcd-label">조리개</span><output class="lcd-value" id="lcdAperture">—</output></div>
+            <div class="lcd-cell"><span class="lcd-label">셔터</span><output class="lcd-value" id="lcdShutter">—</output></div>
+            <div class="lcd-cell"><span class="lcd-label">화이트밸런스</span><output class="lcd-value small" id="lcdWb">—</output></div>
+          </div>
+          <dl class="meta" id="settingsMeta"></dl>
+          <div class="alts" id="alts" role="list"></div>
+          <ul class="notes" id="warnings"></ul>
+          <details class="basis">
+            <summary>계산 근거 보기</summary>
+            <ul id="basis"></ul>
+          </details>
+        </section>
       </div>
     </section>
 
@@ -260,12 +268,12 @@
     </div>
     <nav class="wrap pagetabs" id="pageTabs" aria-label="페이지 이동">
       <button type="button" data-goto="0" aria-current="page">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.5l2.5 5.5M19.4 7.7l-6 .4M19.4 16.3l-3.5-5M12 20.5l-2.5-5.5M4.6 16.3l6-.4M4.6 7.7l3.5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <span>설정</span>
-      </button>
-      <button type="button" data-goto="1">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 5.3L19 10.2l-5.1 1.9L12 17.4l-1.9-5.3L5 10.2l5.1-1.9z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M18.5 16l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" fill="currentColor"/></svg>
         <span>상황</span>
+      </button>
+      <button type="button" data-goto="1">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.5l2.5 5.5M19.4 7.7l-6 .4M19.4 16.3l-3.5-5M12 20.5l-2.5-5.5M4.6 16.3l6-.4M4.6 7.7l3.5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span>설정</span>
       </button>
       <button type="button" data-goto="2">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><polygon points="15.5,8.5 13.4,13.4 8.5,15.5 10.6,10.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>

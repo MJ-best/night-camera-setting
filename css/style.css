@@ -240,11 +240,12 @@ html.nv-green img {
 .page {
   flex: 0 0 100%;
   width: 100%;
+  max-width: 100%;
   min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior-y: contain;
-  scroll-snap-align: start;
+  scroll-snap-align: center;
   scroll-snap-stop: always;
 }
 .page-inner {
@@ -360,9 +361,6 @@ html.nv-green img {
 .wx-status b { font-family: var(--font-mono); font-weight: 500; }
 .more summary { cursor: pointer; color: var(--muted); font-size: 0.82rem; }
 .more .decl { margin-top: 8px; }
-@media (prefers-reduced-motion: no-preference) {
-  .pager { scroll-behavior: smooth; }
-}
 
 .panel {
   background: var(--panel);
